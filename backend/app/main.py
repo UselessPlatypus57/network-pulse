@@ -6,10 +6,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app import __version__, observability
+from app.config import settings
 from app.db import get_db, init_db
 from app.evaluator import evaluation_loop
 from app.routers import alerts, chaos, health, metrics, sites
@@ -36,6 +38,14 @@ def create_app() -> FastAPI:
         version=__version__,
         description="Ingests cell-site health metrics and reports which sites are unhealthy.",
         lifespan=lifespan,
+    )
+    # Only needed when the dashboard is served from a different origin
+    # (the Vite proxy and the nginx container both make it same-origin).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_origins),
+        allow_methods=["GET", "PUT", "POST", "DELETE"],
+        allow_headers=["Content-Type"],
     )
 
     @app.get("/healthz", tags=["ops"])

@@ -28,3 +28,7 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local dev runtime
+.dev/
+.claude/
