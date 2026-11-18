@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from app import __version__
 from app.db import init_db
+from app.routers import metrics, sites
 
 
 @asynccontextmanager
@@ -26,6 +27,8 @@ def create_app() -> FastAPI:
         """Liveness probe: the process is up and serving requests."""
         return {"status": "ok"}
 
+    app.include_router(sites.router)
+    app.include_router(metrics.router)
     return app
 
 
