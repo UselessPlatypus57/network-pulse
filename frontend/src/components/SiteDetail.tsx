@@ -2,19 +2,22 @@ import { useState } from "react";
 import { api } from "../api";
 import { STATUS_LABEL, duration, fmt, timeAgo } from "../format";
 import { usePolling } from "../hooks/usePolling";
-import type { DetectionConfig, Site } from "../types";
+import type { DetectionConfig, Fault, Site } from "../types";
+import { ChaosControls } from "./ChaosControls";
 import { MetricChart } from "./MetricChart";
 import { StatusBadge } from "./StatusBadge";
 
 interface Props {
   site: Site | undefined;
   config: DetectionConfig | undefined;
+  fault: Fault | undefined;
+  onFaultsChanged: () => void;
   onClose: () => void;
 }
 
 const RANGES = [15, 60] as const;
 
-export function SiteDetail({ site, config, onClose }: Props) {
+export function SiteDetail({ site, config, fault, onFaultsChanged, onClose }: Props) {
   const [minutes, setMinutes] = useState<(typeof RANGES)[number]>(15);
   const metrics = usePolling(
     () => (site ? api.siteMetrics(site.id, minutes) : Promise.resolve([])),
@@ -121,6 +124,8 @@ export function SiteDetail({ site, config, onClose }: Props) {
           lowerIsWorse
         />
       </div>
+      <ChaosControls siteId={site.id} fault={fault} onChange={onFaultsChanged} />
+
       {config && (
         <p className="detail-note muted">
           Status uses the median of the last {config.window_s}s (min {config.min_samples} samples). A change needs{" "}

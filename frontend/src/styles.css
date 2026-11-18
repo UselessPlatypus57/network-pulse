@@ -250,3 +250,20 @@ table.sites tbody tr[aria-selected="true"] { background: color-mix(in srgb, var(
 .alert.resolved { opacity: 0.75; }
 .alert.open.critical { box-shadow: inset 3px 0 0 var(--status-offline); }
 .alert.open.warning { box-shadow: inset 3px 0 0 var(--status-degraded); }
+
+/* ---- Chaos controls ----------------------------------------------------- */
+.chaos { margin: 8px 14px 10px; padding: 10px 12px; border-radius: 8px; border: 1px dashed var(--border); background: var(--surface-2); }
+.chaos-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.chaos-duration select { padding: 2px 6px; border-radius: 6px; background: var(--surface-1); border: 1px solid var(--border); }
+.chaos-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.chaos-btn {
+  padding: 5px 11px; border-radius: 7px; font-size: 13px;
+  background: var(--surface-1); border: 1px solid var(--border);
+}
+.chaos-btn:hover:not(:disabled) { border-color: var(--accent); }
+.chaos-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chaos-btn:disabled { opacity: 0.5; cursor: default; }
+.chaos-btn.clear { margin-left: auto; }
+.chaos-status { margin: 8px 0 0; font-size: 12px; }
+.chaos-error { margin: 6px 0 0; font-size: 12px; color: var(--status-offline); }
+.chaos-pill { color: var(--text-primary); }

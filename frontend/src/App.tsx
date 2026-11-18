@@ -16,6 +16,7 @@ export default function App() {
   const sites = usePolling(api.sites, POLL_MS);
   const alerts = usePolling(api.alerts, POLL_MS);
   const config = usePolling(api.config, 60_000);
+  const faults = usePolling(api.faults, POLL_MS);
   const [filter, setFilter] = useState<SiteStatus | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -27,7 +28,14 @@ export default function App() {
           <h1>Network Pulse</h1>
           <span className="tag">Cell-site health monitor</span>
         </div>
-        <MonitorPill summary={summary.data} error={summary.error} lastSuccess={summary.lastSuccess} />
+        <div className="toolbar">
+          {!!faults.data?.length && (
+            <span className="pill chaos-pill" title={faults.data.map((f) => `${f.site_id}: ${f.fault}`).join(", ")}>
+              ⚡ {faults.data.length} fault{faults.data.length > 1 ? "s" : ""} injected
+            </span>
+          )}
+          <MonitorPill summary={summary.data} error={summary.error} lastSuccess={summary.lastSuccess} />
+        </div>
       </header>
 
       <MonitorBanner summary={summary.data} error={summary.error} lastSuccess={summary.lastSuccess} />
@@ -51,6 +59,8 @@ export default function App() {
         <SiteDetail
           site={sites.data?.find((s) => s.id === selectedId)}
           config={config.data}
+          fault={faults.data?.find((f) => f.site_id === selectedId)}
+          onFaultsChanged={faults.refresh}
           onClose={() => setSelectedId(null)}
         />
         <AlertFeed alerts={alerts.data} onSelectSite={setSelectedId} />
