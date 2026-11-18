@@ -4,8 +4,9 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
 # Must be set before the app (and its engine) is imported.
+# SQLite by default; CI also runs the suite against PostgreSQL via TEST_DATABASE_URL.
 _tmpdir = tempfile.mkdtemp(prefix="network-pulse-tests-")
-os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_tmpdir, 'test.db')}"
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL") or f"sqlite:///{os.path.join(_tmpdir, 'test.db')}"
 os.environ["EVALUATOR_ENABLED"] = "false"
 os.environ.pop("WEBHOOK_URL", None)
 
