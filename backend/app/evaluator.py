@@ -80,14 +80,16 @@ def window_stats(db: Session, since: datetime) -> dict[str, WindowStats]:
     }
 
 
-def evaluate_all(db: Session, cfg: Settings, now: datetime | None = None) -> list[Transition]:
+def evaluate_all(
+    db: Session, cfg: Settings, now: datetime | None = None, listening_since: datetime | None = None
+) -> list[Transition]:
     now = now or utcnow()
     stats_by_site = window_stats(db, now - timedelta(seconds=cfg.window_s))
     transitions: list[Transition] = []
 
     for site in db.scalars(select(Site)):
         stats = stats_by_site.get(site.id)
-        verdict = classify(stats, site.last_seen_at, now, cfg)
+        verdict = classify(stats, site.last_seen_at, now, cfg, listening_since)
         decision = step(site.status, site.pending_status, site.pending_count, verdict, cfg)
 
         if stats is not None:
@@ -133,7 +135,7 @@ def run_once(cfg: Settings = settings, notifier: Notifier | None = None) -> list
     started = time.perf_counter()
     with SessionLocal() as db:
         try:
-            transitions = evaluate_all(db, cfg)
+            transitions = evaluate_all(db, cfg, listening_since=monitor_state.started_at)
             process_transitions(db, transitions, notifier or default_notifier)
             if monitor_state.runs % 60 == 0:
                 prune_old_samples(db, cfg)

@@ -74,11 +74,21 @@ def classify(
     last_seen_at: datetime | None,
     now: datetime,
     cfg: Settings,
+    listening_since: datetime | None = None,
 ) -> Verdict:
+    """Judge one site from its window stats.
+
+    ``listening_since`` is when the evaluator started. Silence is only counted
+    from the later of the site's last report and that moment: a site can't be
+    blamed for not reporting while *we* were down. Without this, restarting the
+    monitor after an outage longer than ``stale_after_s`` would mark every site
+    OFFLINE at once and page everyone about the monitor's own downtime.
+    """
     if last_seen_at is None:
         return Verdict(SiteStatus.UNKNOWN)
 
-    silent_for = (now - last_seen_at).total_seconds()
+    heard_from = max(last_seen_at, listening_since) if listening_since else last_seen_at
+    silent_for = (now - heard_from).total_seconds()
     if silent_for > cfg.stale_after_s:
         return Verdict(
             SiteStatus.OFFLINE,

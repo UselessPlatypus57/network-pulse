@@ -4,7 +4,7 @@ import httpx
 
 from app.alerts import AlertEvent, WebhookNotifier, process_transitions
 from app.evaluator import evaluate_all
-from app.models import Alert, AlertSeverity, AlertState, SiteStatus
+from app.models import Alert, AlertSeverity, AlertState, Site, SiteStatus
 from tests.conftest import T0, add_sample, add_site, tick
 
 
@@ -146,3 +146,35 @@ def test_first_reading_blip_is_not_adopted(db, cfg, notifier):
     db.refresh(site)
     assert site.status == SiteStatus.HEALTHY
     assert notifier.kinds == []
+
+
+def test_monitor_restart_does_not_mark_every_site_offline(db, cfg, notifier):
+    """Regression: after the whole monitor was down for longer than
+    stale_after_s, every site's last_seen_at was stale on restart and the first
+    evaluation marked the entire fleet OFFLINE -- an alert storm caused by the
+    monitor's own outage."""
+    from datetime import timedelta
+
+    sites = [add_site(db, f"S-{i}", f"Site {i}") for i in range(5)]
+    for site in sites:
+        for n in range(4):
+            add_sample(db, site, tick(n))
+    evaluate_all(db, cfg, now=tick(4))  # all healthy
+
+    # Monitor is down for 10 minutes, then restarts.
+    restart = tick(4) + timedelta(minutes=10)
+    transitions = evaluate_all(db, cfg, now=restart + timedelta(seconds=5), listening_since=restart)
+    process_transitions(db, transitions, notifier)
+    assert transitions == [] and notifier.kinds == []
+
+    # Collectors resume for four of the sites; S-4 really is dead.
+    for k in range(1, 9):
+        now = restart + timedelta(seconds=5 * k)
+        for site in sites[:4]:
+            add_sample(db, site, now)
+        process_transitions(db, evaluate_all(db, cfg, now=now, listening_since=restart), notifier)
+
+    statuses = {s.id: s.status for s in db.query(Site)}
+    assert statuses["S-4"] == SiteStatus.OFFLINE  # caught once we'd listened long enough
+    assert [st for sid, st in statuses.items() if sid != "S-4"] == [SiteStatus.HEALTHY] * 4
+    assert notifier.kinds == ["opened"]
