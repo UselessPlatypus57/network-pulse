@@ -18,19 +18,19 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base, UTCDateTime, utcnow
 
 
-class SiteStatus(str, enum.Enum):
+class SiteStatus(enum.StrEnum):
     UNKNOWN = "unknown"  # registered, never reported
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     OFFLINE = "offline"
 
 
-class AlertSeverity(str, enum.Enum):
+class AlertSeverity(enum.StrEnum):
     WARNING = "warning"  # site degraded
     CRITICAL = "critical"  # site offline
 
 
-class AlertState(str, enum.Enum):
+class AlertState(enum.StrEnum):
     OPEN = "open"
     RESOLVED = "resolved"
 
