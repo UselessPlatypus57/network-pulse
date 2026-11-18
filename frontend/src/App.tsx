@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "./api";
 import { MonitorBanner, MonitorPill } from "./components/MonitorStatus";
 import { SiteList } from "./components/SiteList";
+import { SiteMap } from "./components/SiteMap";
 import { SummaryTiles } from "./components/SummaryTiles";
 import { usePolling } from "./hooks/usePolling";
 import type { SiteStatus } from "./types";
@@ -29,13 +30,18 @@ export default function App() {
 
       <SummaryTiles summary={summary.data} filter={filter} onFilter={setFilter} />
 
-      <SiteList
-        sites={sites.data}
-        filter={filter}
-        onFilter={setFilter}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-      />
+      <div className="main-grid">
+        <SiteMap sites={sites.data} selectedId={selectedId} onSelect={setSelectedId} />
+        <div className="side-col">
+          <SiteList
+            sites={sites.data}
+            filter={filter}
+            onFilter={setFilter}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        </div>
+      </div>
     </div>
   );
 }
