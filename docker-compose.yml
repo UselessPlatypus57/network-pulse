@@ -1,0 +1,58 @@
+# Network Pulse — full stack.
+#   docker compose up --build
+# Dashboard: http://localhost:8080   API docs: http://localhost:8000/docs
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: pulse
+      POSTGRES_PASSWORD: pulse
+      POSTGRES_DB: network_pulse
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulse -d network_pulse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://pulse:pulse@db:5432/network_pulse
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      # Detection tuning (defaults shown) — see backend/app/config.py
+      WINDOW_S: ${WINDOW_S:-30}
+      TRIP_COUNT: ${TRIP_COUNT:-3}
+      CLEAR_COUNT: ${CLEAR_COUNT:-4}
+      STALE_AFTER_S: ${STALE_AFTER_S:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  simulator:
+    build: ./simulator
+    environment:
+      API_URL: http://api:8000
+      SIM_INTERVAL_S: ${SIM_INTERVAL_S:-5}
+      SIM_INCIDENT_RATE: ${SIM_INCIDENT_RATE:-0.0004}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
