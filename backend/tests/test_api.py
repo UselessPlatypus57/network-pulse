@@ -65,3 +65,12 @@ def test_unhealthy_endpoint_orders_offline_first(client, db):
     summary = client.get("/api/v1/health/summary").json()
     assert summary["total"] == 3
     assert summary["counts"]["offline"] == 1
+
+
+def test_prometheus_metrics_exposed(client):
+    client.put("/api/v1/sites/SEA-001", json=SITE)
+    client.post("/api/v1/metrics", json={"samples": [sample(), sample("GHOST")]})
+    body = client.get("/metrics").text
+    assert "network_pulse_samples_ingested_total" in body
+    assert "network_pulse_samples_rejected_total" in body
+    assert 'route="/api/v1/sites/{site_id}"' in body  # templated, not per-site

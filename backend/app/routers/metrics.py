@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import observability as obs
 from app.db import get_db, utcnow
 from app.models import MetricSample, Site
 from app.schemas import IngestResult, MetricBatch
@@ -47,6 +48,8 @@ def ingest_metrics(batch: MetricBatch, db: Session = Depends(get_db)) -> IngestR
 
     db.add_all(rows)
     db.commit()
+    obs.SAMPLES_INGESTED.inc(accepted)
+    obs.SAMPLES_REJECTED.inc(len(batch.samples) - accepted)
     return IngestResult(
         accepted=accepted,
         rejected=len(batch.samples) - accepted,

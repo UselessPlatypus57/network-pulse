@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import __version__
+from app import __version__, observability
 from app.db import get_db, init_db
 from app.evaluator import evaluation_loop
 from app.routers import alerts, chaos, health, metrics, sites
@@ -57,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(alerts.router)
     app.include_router(chaos.router)
+    observability.install(app)
     return app
 
 

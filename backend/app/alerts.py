@@ -20,6 +20,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import observability as obs
 from app.health import Transition
 from app.models import Alert, AlertSeverity, AlertState, Site, SiteStatus
 
@@ -106,8 +107,10 @@ class WebhookNotifier:
         try:
             resp = httpx.post(self.url, json=self.payload(event), timeout=self.timeout_s)
             resp.raise_for_status()
+            obs.NOTIFICATIONS.labels("sent").inc()
             return True
         except httpx.HTTPError as exc:
+            obs.NOTIFICATIONS.labels("failed").inc()
             log.warning("webhook delivery failed for alert %s: %s", event.alert_id, exc)
             return False
 

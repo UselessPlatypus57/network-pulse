@@ -14,14 +14,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from statistics import median_high, median_low
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app import observability as obs
 from app.alerts import Notifier, make_notifier, process_transitions
 from app.config import Settings, settings
 from app.db import SessionLocal, utcnow
 from app.health import Transition, WindowStats, classify, step
-from app.models import MetricSample, Site
+from app.models import Alert, AlertSeverity, AlertState, MetricSample, Site, SiteStatus
 
 log = logging.getLogger("network_pulse.evaluator")
 
@@ -115,6 +116,19 @@ def prune_old_samples(db: Session, cfg: Settings, now: datetime | None = None) -
     return result.rowcount or 0
 
 
+def update_gauges(db: Session) -> None:
+    counts = dict(db.execute(select(Site.status, func.count()).group_by(Site.status)).all())
+    for status in SiteStatus:
+        obs.SITES.labels(status.value).set(counts.get(status, 0))
+    open_by_sev = dict(
+        db.execute(
+            select(Alert.severity, func.count()).where(Alert.state == AlertState.OPEN).group_by(Alert.severity)
+        ).all()
+    )
+    for sev in AlertSeverity:
+        obs.OPEN_ALERTS.labels(sev.value).set(open_by_sev.get(sev, 0))
+
+
 def run_once(cfg: Settings = settings, notifier: Notifier | None = None) -> list[Transition]:
     started = time.perf_counter()
     with SessionLocal() as db:
@@ -123,17 +137,24 @@ def run_once(cfg: Settings = settings, notifier: Notifier | None = None) -> list
             process_transitions(db, transitions, notifier or default_notifier)
             if monitor_state.runs % 60 == 0:
                 prune_old_samples(db, cfg)
+            update_gauges(db)
+            for t in transitions:
+                obs.TRANSITIONS.labels(t.current.value).inc()
+            obs.EVALUATION_LAST_SUCCESS.set(time.time())
             monitor_state.last_error = None
             return transitions
         except Exception as exc:  # keep the loop alive; surface the error
             db.rollback()
+            obs.EVALUATION_ERRORS.inc()
             monitor_state.last_error = f"{type(exc).__name__}: {exc}"
             log.exception("evaluation failed")
             return []
         finally:
             monitor_state.runs += 1
             monitor_state.last_run_at = utcnow()
-            monitor_state.last_duration_ms = round((time.perf_counter() - started) * 1000, 2)
+            elapsed = time.perf_counter() - started
+            obs.EVALUATION_DURATION.observe(elapsed)
+            monitor_state.last_duration_ms = round(elapsed * 1000, 2)
 
 
 async def evaluation_loop(cfg: Settings = settings) -> None:
