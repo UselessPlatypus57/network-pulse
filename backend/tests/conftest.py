@@ -63,8 +63,8 @@ def notifier() -> RecordingNotifier:
     return RecordingNotifier()
 
 
-def add_site(db: Session, site_id: str = "SEA-001", name: str = "Capitol Hill") -> Site:
-    site = Site(id=site_id, name=name, region="Seattle", latitude=47.6, longitude=-122.3, status_since=T0)
+def add_site(db: Session, site_id: str = "HOU-001", name: str = "Montrose") -> Site:
+    site = Site(id=site_id, name=name, region="Inner Houston", latitude=29.75, longitude=-95.39, status_since=T0)
     db.add(site)
     db.commit()
     return site

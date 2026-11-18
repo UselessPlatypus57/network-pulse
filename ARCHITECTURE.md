@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-    SIM[Simulator<br/>42 cell sites] -- "POST /api/v1/metrics<br/>(batched, every 5s)" --> API
+    SIM[Simulator<br/>40 cell sites] -- "POST /api/v1/metrics<br/>(batched, every 5s)" --> API
     SIM -- "GET /api/v1/chaos" --> API
     subgraph API[FastAPI service]
         ING[Ingestion] --> DB[(PostgreSQL)]
@@ -67,7 +67,7 @@ By requiring the evidence to be **widespread in time** (a majority of a window) 
 | Rolling window | judging one sample in isolation | design |
 | **Median instead of mean** | a single 2000 ms spike pulling the window mean over 150 ms for 30 s | the test `test_transient_spike_raises_no_alert` failed against the first (mean-based) version |
 | **Strict-majority median** | an even-sized window that is exactly half spikes averaging to ~470 ms | the simulator's `flap` fault raised an alert in the first end-to-end run |
-| **Minimum samples** | a site whose *first ever* reading was a blip going straight to DEGRADED | the same end-to-end run (EAS-007) |
+| **Minimum samples** | a site whose *first ever* reading was a blip going straight to DEGRADED | the same end-to-end run |
 | Hysteresis (3 to trip, 4 to clear) | short bursts (< 15 s) and flapping between states | design; `test_flapping_never_trips` |
 
 **The trade-off is time-to-detect.** With these defaults a real degradation alerts after about 35 s: about 20 s for the problem to fill a majority of the window, plus 15 s of confirmation. A hard outage alerts at about 30 s. For a cell site that's a reasonable price for not paging on noise, and every knob (`WINDOW_S`, `TRIP_COUNT`, `CLEAR_COUNT`, `MIN_SAMPLES`, `STALE_AFTER_S`) is an env var, so it can be tuned per environment.
@@ -119,7 +119,7 @@ What the system already does:
 
 Next steps:
 - **Per-site, time-of-day baselines**: thresholds as "N× this site's p95 for this hour" rather than a global 150 ms.
-- **Alert grouping and correlation**: one alert for "Eastside: 6 sites degraded" instead of six, and suppress downstream sites when their upstream aggregation point is down.
+- **Alert grouping and correlation**: one alert for "West Houston: 6 sites degraded" instead of six, and suppress downstream sites when their upstream aggregation point is down.
 - **Maintenance windows and silences**: planned work shouldn't page.
 - **Measure it**: track alert precision (alerts that needed action ÷ all alerts) and time-to-detect as SLOs, and tune the knobs against both, since they trade off directly.
 

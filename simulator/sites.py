@@ -1,7 +1,7 @@
-"""Simulated cell-site catalogue: ~40 sites across the Seattle metro area.
+"""Simulated cell-site catalogue: 40 sites across the Greater Houston area.
 
-Coordinates are approximate neighbourhood centres; site IDs and names are
-made up for the simulation.
+Coordinates are approximate neighbourhood/city centres; site IDs and names are
+made up for the simulation and are not real tower locations.
 """
 
 from __future__ import annotations
@@ -20,55 +20,53 @@ class SiteSpec:
 
 
 _RAW: dict[str, tuple[str, list[tuple[str, float, float]]]] = {
-    "Seattle": ("SEA", [
-        ("Downtown", 47.6062, -122.3321),
-        ("Capitol Hill", 47.6253, -122.3222),
-        ("Ballard", 47.6687, -122.3847),
-        ("Fremont", 47.6505, -122.3509),
-        ("University District", 47.6615, -122.3138),
-        ("Queen Anne", 47.6374, -122.3570),
-        ("West Seattle", 47.5667, -122.3868),
-        ("Beacon Hill", 47.5682, -122.3087),
-        ("Columbia City", 47.5596, -122.2867),
-        ("Georgetown", 47.5478, -122.3220),
-        ("Northgate", 47.7062, -122.3255),
-        ("Lake City", 47.7193, -122.2953),
-        ("Greenwood", 47.6909, -122.3552),
-        ("SoDo", 47.5806, -122.3343),
-        ("South Lake Union", 47.6234, -122.3366),
-        ("Magnolia", 47.6505, -122.4000),
-        ("Rainier Beach", 47.5212, -122.2683),
+    "Inner Houston": ("HOU", [
+        ("Downtown", 29.7604, -95.3698),
+        ("Midtown", 29.7399, -95.3780),
+        ("Montrose", 29.7453, -95.3910),
+        ("Texas Medical Center", 29.7069, -95.4010),
+        ("Galleria / Uptown", 29.7390, -95.4610),
+        ("The Heights", 29.7980, -95.3980),
+        ("Rice Village", 29.7171, -95.4150),
+        ("EaDo", 29.7520, -95.3500),
+        ("Third Ward", 29.7290, -95.3600),
+        ("Bellaire", 29.7058, -95.4588),
+        ("Memorial", 29.7790, -95.5420),
+        ("Westchase", 29.7280, -95.5680),
+        ("Sharpstown", 29.6930, -95.5160),
+        ("Hobby Airport", 29.6454, -95.2789),
+        ("Greenspoint", 29.9450, -95.4160),
+        ("IAH Airport", 29.9902, -95.3368),
     ]),
-    "Eastside": ("EAS", [
-        ("Bellevue Downtown", 47.6101, -122.2015),
-        ("Factoria", 47.5776, -122.1700),
-        ("Crossroads", 47.6178, -122.1290),
-        ("Redmond", 47.6740, -122.1215),
-        ("Kirkland", 47.6769, -122.2060),
-        ("Issaquah", 47.5301, -122.0326),
-        ("Bothell", 47.7601, -122.2054),
-        ("Mercer Island", 47.5707, -122.2221),
-        ("Sammamish", 47.6163, -122.0356),
-        ("Woodinville", 47.7543, -122.1635),
+    "West": ("WST", [
+        ("Energy Corridor", 29.7840, -95.6440),
+        ("Katy", 29.7858, -95.8245),
+        ("Cinco Ranch", 29.7400, -95.7600),
+        ("Fulshear", 29.6930, -95.8980),
+        ("Sugar Land", 29.6197, -95.6349),
+        ("Missouri City", 29.6186, -95.5377),
+        ("Richmond", 29.5822, -95.7608),
     ]),
-    "South King": ("SKC", [
-        ("Renton", 47.4829, -122.2171),
-        ("Tukwila", 47.4740, -122.2610),
-        ("SeaTac", 47.4436, -122.3016),
-        ("Burien", 47.4704, -122.3468),
-        ("Kent", 47.3809, -122.2348),
-        ("Federal Way", 47.3223, -122.3126),
-        ("Auburn", 47.3073, -122.2285),
+    "North": ("NTH", [
+        ("The Woodlands", 30.1658, -95.4613),
+        ("Spring", 30.0799, -95.4172),
+        ("Humble", 29.9988, -95.2622),
+        ("Kingwood", 30.0500, -95.1850),
+        ("Cypress", 29.9691, -95.6972),
+        ("Tomball", 30.0972, -95.6161),
+        ("Conroe", 30.3119, -95.4561),
+        ("Atascocita", 29.9988, -95.1766),
     ]),
-    "Snohomish": ("SNO", [
-        ("Shoreline", 47.7557, -122.3415),
-        ("Lynnwood", 47.8209, -122.3151),
-        ("Edmonds", 47.8107, -122.3774),
-        ("Everett", 47.9790, -122.2021),
-        ("Mill Creek", 47.8601, -122.2043),
-        ("Lake Forest Park", 47.7568, -122.2804),
-        ("Mukilteo", 47.9445, -122.3046),
-        ("Marysville", 48.0518, -122.1771),
+    "Bay Area": ("BAY", [
+        ("Pasadena", 29.6911, -95.2091),
+        ("Deer Park", 29.7052, -95.1238),
+        ("Baytown", 29.7355, -94.9774),
+        ("Pearland", 29.5636, -95.2860),
+        ("Friendswood", 29.5294, -95.2010),
+        ("Clear Lake", 29.5560, -95.0950),
+        ("League City", 29.5075, -95.0950),
+        ("Texas City", 29.3838, -94.9027),
+        ("Galveston", 29.3013, -94.7977),
     ]),
 }
 
@@ -77,7 +75,7 @@ def catalogue() -> list[SiteSpec]:
     sites: list[SiteSpec] = []
     for region, (prefix, places) in _RAW.items():
         for i, (name, lat, lon) in enumerate(places, start=1):
-            # Denser urban cores run 5G; outer suburbs mix in LTE.
-            tech = "5G" if region in ("Seattle", "Eastside") or i % 3 else "LTE"
+            # The dense urban core and west side run 5G; outer areas mix in LTE.
+            tech = "5G" if region in ("Inner Houston", "West") or i % 3 else "LTE"
             sites.append(SiteSpec(f"{prefix}-{i:03d}", name, region, tech, lat, lon))
     return sites

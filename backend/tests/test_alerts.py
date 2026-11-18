@@ -91,7 +91,7 @@ def test_one_open_alert_per_site(db, cfg, notifier):
 
 
 def _event(kind="opened"):
-    return AlertEvent(kind, 1, "SEA-001", "Capitol Hill", AlertSeverity.CRITICAL, SiteStatus.OFFLINE,
+    return AlertEvent(kind, 1, "HOU-001", "Montrose", AlertSeverity.CRITICAL, SiteStatus.OFFLINE,
                       "no data for 40s (heartbeat lost)", T0)
 
 
@@ -99,7 +99,7 @@ def test_webhook_payload_shapes():
     assert set(WebhookNotifier("https://discord.com/api/webhooks/1/x").payload(_event())) == {"content"}
     assert set(WebhookNotifier("https://hooks.slack.com/services/x").payload(_event())) == {"text"}
     generic = WebhookNotifier("https://example.test/hook").payload(_event())
-    assert generic["event"]["site_id"] == "SEA-001"
+    assert generic["event"]["site_id"] == "HOU-001"
     assert "OFFLINE" in generic["text"]
 
 

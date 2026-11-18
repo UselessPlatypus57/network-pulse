@@ -1,6 +1,6 @@
 # Network Pulse
 
-**A network health & outage monitor for simulated cellular sites.** Probes report latency, packet loss and availability for 42 cell sites around the Seattle metro. A FastAPI service decides which sites are healthy, degraded or offline, and opens and resolves alerts. A React dashboard shows the fleet on a live map.
+**A network health & outage monitor for simulated cellular sites.** Probes report latency, packet loss and availability for 40 cell sites across the Houston metro. A FastAPI service decides which sites are healthy, degraded or offline, and opens and resolves alerts. A React dashboard shows the fleet on a live map.
 
 The interesting part is **telling a real outage from a blip**: a rolling-window median, a minimum sample count, hysteresis, and heartbeat-loss detection. A built-in chaos panel lets you break a site on demand and watch detection, alerting and recovery happen.
 
@@ -71,7 +71,7 @@ cd backend && pytest && ruff check .
 Or use the API directly:
 
 ```bash
-curl -X PUT localhost:8000/api/v1/chaos/SEA-002 -H "Content-Type: application/json" -d '{"fault":"latency","duration_s":120}'
+curl -X PUT localhost:8000/api/v1/chaos/HOU-002 -H "Content-Type: application/json" -d '{"fault":"latency","duration_s":120}'
 curl localhost:8000/api/v1/health/unhealthy
 ```
 
@@ -109,6 +109,6 @@ Python 3.12 · FastAPI · SQLAlchemy 2 · PostgreSQL 17 · React 19 · TypeScrip
 
 ```
 backend/     FastAPI service: ingestion, health engine, alerts, chaos API, tests
-simulator/   Probe simulator for 42 Seattle-area sites (blips, incidents, chaos)
+simulator/   Probe simulator for 40 Houston-area sites (blips, incidents, chaos)
 frontend/    React + TypeScript dashboard (served by nginx in Docker)
 ```

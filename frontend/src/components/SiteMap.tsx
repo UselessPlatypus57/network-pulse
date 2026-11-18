@@ -80,11 +80,11 @@ export function SiteMap({ sites, selectedId, onSelect }: Props) {
   return (
     <section className="card map-card" aria-label="Site map">
       <div className="card-header">
-        <h2 className="card-title">Coverage map · Seattle metro</h2>
+        <h2 className="card-title">Coverage map · Houston metro</h2>
         <span className="muted">Click a site for details</span>
       </div>
       <div className="map-wrap">
-        <MapContainer center={[47.62, -122.25]} zoom={10} scrollWheelZoom={false} className={`map ${scheme}`} attributionControl>
+        <MapContainer center={[29.76, -95.37]} zoom={10} scrollWheelZoom={false} className={`map ${scheme}`} attributionControl>
           <TileLayer url={TILE_URL} attribution={ATTRIBUTION} maxZoom={19} />
           <FitOnce bounds={bounds} />
           <FollowSelection site={sites?.find((s) => s.id === selectedId)} />
