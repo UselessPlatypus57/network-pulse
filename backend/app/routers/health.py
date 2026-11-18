@@ -68,3 +68,37 @@ def unhealthy_sites(db: Session = Depends(get_db)) -> list[Site]:
         .order_by(severity, Site.status_since)
     )
     return list(db.scalars(stmt))
+
+
+class DetectionConfig(BaseModel):
+    """The rules the evaluator applies, so clients can draw thresholds instead of hard-coding them."""
+
+    latency_degraded_ms: float
+    packet_loss_degraded_pct: float
+    availability_degraded_pct: float
+    packet_loss_offline_pct: float
+    availability_offline_pct: float
+    window_s: int
+    min_samples: int
+    trip_count: int
+    clear_count: int
+    stale_after_s: int
+    evaluation_interval_s: float
+
+
+@router.get("/config", response_model=DetectionConfig)
+def detection_config() -> DetectionConfig:
+    t = settings.thresholds
+    return DetectionConfig(
+        latency_degraded_ms=t.latency_degraded_ms,
+        packet_loss_degraded_pct=t.packet_loss_degraded_pct,
+        availability_degraded_pct=t.availability_degraded_pct,
+        packet_loss_offline_pct=t.packet_loss_offline_pct,
+        availability_offline_pct=t.availability_offline_pct,
+        window_s=settings.window_s,
+        min_samples=settings.min_samples,
+        trip_count=settings.trip_count,
+        clear_count=settings.clear_count,
+        stale_after_s=settings.stale_after_s,
+        evaluation_interval_s=settings.evaluation_interval_s,
+    )

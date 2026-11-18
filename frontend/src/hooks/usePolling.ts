@@ -23,6 +23,13 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number, dep
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
+  // New inputs (e.g. a different site) invalidate the old value immediately.
+  useEffect(() => {
+    setData(undefined);
+    setError(undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;

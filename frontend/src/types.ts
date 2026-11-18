@@ -64,3 +64,17 @@ export interface Fault {
   started_at: string;
   expires_at: string;
 }
+
+export interface DetectionConfig {
+  latency_degraded_ms: number;
+  packet_loss_degraded_pct: number;
+  availability_degraded_pct: number;
+  packet_loss_offline_pct: number;
+  availability_offline_pct: number;
+  window_s: number;
+  min_samples: number;
+  trip_count: number;
+  clear_count: number;
+  stale_after_s: number;
+  evaluation_interval_s: number;
+}

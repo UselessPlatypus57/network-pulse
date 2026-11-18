@@ -1,4 +1,4 @@
-import type { Alert, Fault, FaultKind, HealthSummary, MetricPoint, Site } from "./types";
+import type { Alert, DetectionConfig, Fault, FaultKind, HealthSummary, MetricPoint, Site } from "./types";
 
 // Same-origin by default (Vite proxy in dev, nginx in Docker).
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -28,6 +28,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   summary: () => request<HealthSummary>("/api/v1/health/summary"),
+  config: () => request<DetectionConfig>("/api/v1/health/config"),
   sites: () => request<Site[]>("/api/v1/sites"),
   siteMetrics: (id: string, minutes = 15) =>
     request<MetricPoint[]>(`/api/v1/sites/${encodeURIComponent(id)}/metrics?minutes=${minutes}`),

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { api } from "./api";
+import { AlertFeed } from "./components/AlertFeed";
 import { MonitorBanner, MonitorPill } from "./components/MonitorStatus";
+import { SiteDetail } from "./components/SiteDetail";
 import { SiteList } from "./components/SiteList";
 import { SiteMap } from "./components/SiteMap";
 import { SummaryTiles } from "./components/SummaryTiles";
@@ -12,6 +14,8 @@ const POLL_MS = 3000;
 export default function App() {
   const summary = usePolling(api.summary, POLL_MS);
   const sites = usePolling(api.sites, POLL_MS);
+  const alerts = usePolling(api.alerts, POLL_MS);
+  const config = usePolling(api.config, 60_000);
   const [filter, setFilter] = useState<SiteStatus | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -41,6 +45,15 @@ export default function App() {
             onSelect={setSelectedId}
           />
         </div>
+      </div>
+
+      <div className="main-grid">
+        <SiteDetail
+          site={sites.data?.find((s) => s.id === selectedId)}
+          config={config.data}
+          onClose={() => setSelectedId(null)}
+        />
+        <AlertFeed alerts={alerts.data} onSelectSite={setSelectedId} />
       </div>
     </div>
   );

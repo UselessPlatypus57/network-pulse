@@ -74,3 +74,9 @@ def test_prometheus_metrics_exposed(client):
     assert "network_pulse_samples_ingested_total" in body
     assert "network_pulse_samples_rejected_total" in body
     assert 'route="/api/v1/sites/{site_id}"' in body  # templated, not per-site
+
+
+def test_detection_config_exposed(client):
+    cfg = client.get("/api/v1/health/config").json()
+    assert cfg["latency_degraded_ms"] == 150
+    assert cfg["trip_count"] >= 1 and cfg["clear_count"] >= 1
