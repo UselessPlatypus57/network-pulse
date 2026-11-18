@@ -12,7 +12,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from statistics import median
+from statistics import median_high, median_low
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -43,12 +43,17 @@ default_notifier: Notifier = make_notifier(settings.webhook_url)
 
 
 def window_stats(db: Session, since: datetime) -> dict[str, WindowStats]:
-    """Per-site *median* of each metric over the window.
+    """Per-site *strict-majority median* of each metric over the window.
 
     Median rather than mean: a single 2-second latency spike drags a 6-sample
     mean over the threshold for the whole window (and long enough to trip the
-    hysteresis), but cannot move the median at all. A genuine problem has to
-    affect at least half the window's samples to count.
+    hysteresis), but cannot move the median at all.
+
+    For even-sized windows the textbook median averages the two middle values,
+    so a window that is exactly half spikes reads as a breach. Instead we take
+    the *optimistic* middle value -- ``median_low`` for metrics where higher is
+    worse (latency, loss) and ``median_high`` for availability -- which means a
+    breach must be present in a strict majority of samples to count.
     """
     rows = db.execute(
         select(
@@ -66,9 +71,9 @@ def window_stats(db: Session, since: datetime) -> dict[str, WindowStats]:
     return {
         site_id: WindowStats(
             samples=len(vals),
-            latency_ms=median(v[0] for v in vals),
-            packet_loss_pct=median(v[1] for v in vals),
-            availability_pct=median(v[2] for v in vals),
+            latency_ms=median_low([v[0] for v in vals]),
+            packet_loss_pct=median_low([v[1] for v in vals]),
+            availability_pct=median_high([v[2] for v in vals]),
         )
         for site_id, vals in grouped.items()
     }

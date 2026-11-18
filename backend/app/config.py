@@ -52,6 +52,7 @@ class Settings:
     stale_after_s: int = 30
     trip_count: int = 3  # consecutive bad evaluations before a site is marked worse
     clear_count: int = 4  # consecutive good evaluations before a site is marked better
+    min_samples: int = 3  # fewer samples than this in the window = not enough evidence
     retention_hours: int = 24
 
     # Alerting
@@ -72,6 +73,7 @@ class Settings:
             stale_after_s=_env_int("STALE_AFTER_S", cls.stale_after_s),
             trip_count=_env_int("TRIP_COUNT", cls.trip_count),
             clear_count=_env_int("CLEAR_COUNT", cls.clear_count),
+            min_samples=_env_int("MIN_SAMPLES", cls.min_samples),
             retention_hours=_env_int("RETENTION_HOURS", cls.retention_hours),
             webhook_url=os.getenv("WEBHOOK_URL") or None,
             cors_origins=tuple(o.strip() for o in origins.split(",") if o.strip())

@@ -109,3 +109,40 @@ def test_webhook_failure_is_swallowed(monkeypatch):
 
     monkeypatch.setattr(httpx, "post", boom)
     assert WebhookNotifier("https://example.test/hook")._send(_event()) is False
+
+
+def test_window_uses_strict_majority_median(db):
+    """Regression: an even-sized window that is exactly half spikes used to
+    average the two middle values (~470ms) and read as a breach. Found by the
+    simulator's `flap` fault."""
+    from app.evaluator import window_stats
+
+    site = add_site(db)
+    for n, (lat, avail) in enumerate([(40, 100), (900, 10), (40, 100), (900, 10)]):
+        add_sample(db, site, tick(n), latency=lat, avail=avail)
+
+    stats = window_stats(db, since=tick(0))[site.id]
+    assert stats.samples == 4
+    assert stats.latency_ms == 40  # not (40 + 900) / 2
+    assert stats.availability_pct == 100
+
+
+def test_flapping_site_never_alerts(db, cfg, notifier):
+    site = add_site(db)
+    for n in range(40):
+        latency = 1000 if n % 3 == 0 else 40  # spike on every third sample
+        add_sample(db, site, tick(n), latency=latency)
+        evaluate(db, cfg, notifier, n)
+    assert notifier.kinds == []
+
+
+def test_first_reading_blip_is_not_adopted(db, cfg, notifier):
+    """Regression: a site whose very first sample was a blip went straight
+    from UNKNOWN to DEGRADED, because first observations skip hysteresis."""
+    site = add_site(db)
+    for n in range(8):
+        add_sample(db, site, tick(n), latency=2200 if n == 0 else 40)
+        evaluate(db, cfg, notifier, n)
+    db.refresh(site)
+    assert site.status == SiteStatus.HEALTHY
+    assert notifier.kinds == []

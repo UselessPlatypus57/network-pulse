@@ -106,3 +106,8 @@ def test_immediate_verdict_bypasses_hysteresis(cfg):
 def test_no_evidence_preserves_pending_progress(cfg):
     d = step(S.HEALTHY, S.DEGRADED, 2, Verdict(None), cfg)
     assert (d.status, d.pending_status, d.pending_count) == (S.HEALTHY, S.DEGRADED, 2)
+
+
+def test_too_few_samples_holds_state(cfg):
+    # Two samples, both awful: still not enough evidence to judge.
+    assert classify(stats(samples=2, latency_ms=900), T0, T0, cfg).candidate is None

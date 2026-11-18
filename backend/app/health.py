@@ -86,7 +86,9 @@ def classify(
             immediate=True,
         )
 
-    if stats is None or stats.samples == 0:
+    if stats is None or stats.samples < cfg.min_samples:
+        # Too little data to judge (e.g. a site's very first reading, or a
+        # collector that just reconnected). Hold the current state.
         return Verdict(None)
 
     t = cfg.thresholds
