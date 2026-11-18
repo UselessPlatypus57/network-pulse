@@ -14,6 +14,29 @@ def evaluate(db, cfg, notifier, n):
     return transitions
 
 
+def test_transient_spike_raises_no_alert(db, cfg, notifier):
+    """Regression: one extreme sample used to skew the window *mean* above the
+    threshold for long enough to trip the hysteresis and page someone."""
+    site = add_site(db)
+    for n in range(12):
+        latency = 2000 if n == 5 else 40  # one terrible sample
+        add_sample(db, site, tick(n), latency=latency)
+        evaluate(db, cfg, notifier, n)
+
+    db.refresh(site)
+    assert site.status == SiteStatus.HEALTHY
+    assert notifier.kinds == []
+
+
+def test_short_burst_shorter_than_trip_delay_raises_no_alert(db, cfg, notifier):
+    site = add_site(db)
+    for n in range(20):
+        latency = 600 if 5 <= n < 8 else 40  # 15s burst
+        add_sample(db, site, tick(n), latency=latency)
+        evaluate(db, cfg, notifier, n)
+    assert notifier.kinds == []
+
+
 def test_sustained_degradation_opens_single_warning(db, cfg, notifier):
     site = add_site(db)
     add_sample(db, site, tick(0))

@@ -6,11 +6,11 @@ from app.health import Verdict, WindowStats, classify, step
 from app.models import SiteStatus as S
 from tests.conftest import T0
 
-GOOD = WindowStats(samples=6, avg_latency_ms=40, avg_packet_loss_pct=0.1, avg_availability_pct=99.99)
+GOOD = WindowStats(samples=6, latency_ms=40, packet_loss_pct=0.1, availability_pct=99.99)
 
 
 def stats(**kw) -> WindowStats:
-    base = dict(samples=6, avg_latency_ms=40, avg_packet_loss_pct=0.1, avg_availability_pct=99.99)
+    base = dict(samples=6, latency_ms=40, packet_loss_pct=0.1, availability_pct=99.99)
     base.update(kw)
     return WindowStats(**base)
 
@@ -27,23 +27,23 @@ def test_healthy_metrics(cfg):
 
 
 def test_high_latency_is_degraded_with_reason(cfg):
-    v = classify(stats(avg_latency_ms=320), T0, T0, cfg)
+    v = classify(stats(latency_ms=320), T0, T0, cfg)
     assert v.candidate == S.DEGRADED
     assert v.reasons == ["latency 320ms > 150ms"]
 
 
 def test_multiple_breaches_all_reported(cfg):
-    v = classify(stats(avg_latency_ms=200, avg_packet_loss_pct=5, avg_availability_pct=97), T0, T0, cfg)
+    v = classify(stats(latency_ms=200, packet_loss_pct=5, availability_pct=97), T0, T0, cfg)
     assert v.candidate == S.DEGRADED
     assert len(v.reasons) == 3
 
 
 def test_availability_collapse_is_offline(cfg):
-    assert classify(stats(avg_availability_pct=20), T0, T0, cfg).candidate == S.OFFLINE
+    assert classify(stats(availability_pct=20), T0, T0, cfg).candidate == S.OFFLINE
 
 
 def test_massive_packet_loss_is_offline(cfg):
-    assert classify(stats(avg_packet_loss_pct=75), T0, T0, cfg).candidate == S.OFFLINE
+    assert classify(stats(packet_loss_pct=75), T0, T0, cfg).candidate == S.OFFLINE
 
 
 def test_heartbeat_loss_is_immediate_offline(cfg):

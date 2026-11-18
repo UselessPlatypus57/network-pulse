@@ -5,8 +5,8 @@ site is HEALTHY, DEGRADED or OFFLINE, so it is kept trivially unit-testable.
 
 Two layers keep transient fluctuations from becoming alerts:
 
-1. **Rolling window** — metrics are averaged over the last ``window_s`` seconds,
-   so one bad sample barely moves the needle.
+1. **Rolling window median** — each metric is the median of the last
+   ``window_s`` seconds of samples, so a single outlier cannot move it.
 2. **Hysteresis** — a site must look worse for ``trip_count`` consecutive
    evaluations before it is marked worse, and better for ``clear_count``
    consecutive evaluations before it is marked better (asymmetric on purpose:
@@ -35,10 +35,12 @@ RANK = {
 
 @dataclass(frozen=True)
 class WindowStats:
+    """Median of each metric over the evaluation window."""
+
     samples: int
-    avg_latency_ms: float
-    avg_packet_loss_pct: float
-    avg_availability_pct: float
+    latency_ms: float
+    packet_loss_pct: float
+    availability_pct: float
 
 
 @dataclass(frozen=True)
@@ -89,20 +91,20 @@ def classify(
 
     t = cfg.thresholds
     offline: list[str] = []
-    if stats.avg_availability_pct < t.availability_offline_pct:
-        offline.append(f"availability {stats.avg_availability_pct:.1f}% < {t.availability_offline_pct:g}%")
-    if stats.avg_packet_loss_pct >= t.packet_loss_offline_pct:
-        offline.append(f"packet loss {stats.avg_packet_loss_pct:.1f}% >= {t.packet_loss_offline_pct:g}%")
+    if stats.availability_pct < t.availability_offline_pct:
+        offline.append(f"availability {stats.availability_pct:.1f}% < {t.availability_offline_pct:g}%")
+    if stats.packet_loss_pct >= t.packet_loss_offline_pct:
+        offline.append(f"packet loss {stats.packet_loss_pct:.1f}% >= {t.packet_loss_offline_pct:g}%")
     if offline:
         return Verdict(SiteStatus.OFFLINE, offline)
 
     degraded: list[str] = []
-    if stats.avg_latency_ms > t.latency_degraded_ms:
-        degraded.append(f"latency {stats.avg_latency_ms:.0f}ms > {t.latency_degraded_ms:g}ms")
-    if stats.avg_packet_loss_pct > t.packet_loss_degraded_pct:
-        degraded.append(f"packet loss {stats.avg_packet_loss_pct:.1f}% > {t.packet_loss_degraded_pct:g}%")
-    if stats.avg_availability_pct < t.availability_degraded_pct:
-        degraded.append(f"availability {stats.avg_availability_pct:.2f}% < {t.availability_degraded_pct:g}%")
+    if stats.latency_ms > t.latency_degraded_ms:
+        degraded.append(f"latency {stats.latency_ms:.0f}ms > {t.latency_degraded_ms:g}ms")
+    if stats.packet_loss_pct > t.packet_loss_degraded_pct:
+        degraded.append(f"packet loss {stats.packet_loss_pct:.1f}% > {t.packet_loss_degraded_pct:g}%")
+    if stats.availability_pct < t.availability_degraded_pct:
+        degraded.append(f"availability {stats.availability_pct:.2f}% < {t.availability_degraded_pct:g}%")
     if degraded:
         return Verdict(SiteStatus.DEGRADED, degraded)
 

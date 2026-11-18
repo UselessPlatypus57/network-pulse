@@ -62,9 +62,9 @@ class Site(Base):
 
     # Rolling-window aggregates from the last evaluation
     last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
-    avg_latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
-    avg_packet_loss_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
-    avg_availability_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    window_latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    window_packet_loss_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    window_availability_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     samples: Mapped[list[MetricSample]] = relationship(back_populates="site", cascade="all, delete-orphan")
     alerts: Mapped[list[Alert]] = relationship(back_populates="site", cascade="all, delete-orphan")

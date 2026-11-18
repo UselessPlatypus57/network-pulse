@@ -34,9 +34,9 @@ class SiteOut(BaseModel):
     )
     pending_count: int = 0
     last_seen_at: datetime | None
-    avg_latency_ms: float | None
-    avg_packet_loss_pct: float | None
-    avg_availability_pct: float | None
+    window_latency_ms: float | None
+    window_packet_loss_pct: float | None
+    window_availability_pct: float | None
 
     @field_validator("reasons", mode="before")
     @classmethod

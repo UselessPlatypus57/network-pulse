@@ -9,10 +9,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from statistics import median
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.alerts import Notifier, make_notifier, process_transitions
@@ -41,20 +43,34 @@ default_notifier: Notifier = make_notifier(settings.webhook_url)
 
 
 def window_stats(db: Session, since: datetime) -> dict[str, WindowStats]:
+    """Per-site *median* of each metric over the window.
+
+    Median rather than mean: a single 2-second latency spike drags a 6-sample
+    mean over the threshold for the whole window (and long enough to trip the
+    hysteresis), but cannot move the median at all. A genuine problem has to
+    affect at least half the window's samples to count.
+    """
     rows = db.execute(
         select(
             MetricSample.site_id,
-            func.count(),
-            func.avg(MetricSample.latency_ms),
-            func.avg(MetricSample.packet_loss_pct),
-            func.avg(MetricSample.availability_pct),
-        )
-        .where(MetricSample.ts >= since)
-        .group_by(MetricSample.site_id)
+            MetricSample.latency_ms,
+            MetricSample.packet_loss_pct,
+            MetricSample.availability_pct,
+        ).where(MetricSample.ts >= since)
     ).all()
+
+    grouped: dict[str, list[tuple[float, float, float]]] = defaultdict(list)
+    for site_id, lat, loss, avail in rows:
+        grouped[site_id].append((lat, loss, avail))
+
     return {
-        site_id: WindowStats(n, float(lat), float(loss), float(avail))
-        for site_id, n, lat, loss, avail in rows
+        site_id: WindowStats(
+            samples=len(vals),
+            latency_ms=median(v[0] for v in vals),
+            packet_loss_pct=median(v[1] for v in vals),
+            availability_pct=median(v[2] for v in vals),
+        )
+        for site_id, vals in grouped.items()
     }
 
 
@@ -69,9 +85,9 @@ def evaluate_all(db: Session, cfg: Settings, now: datetime | None = None) -> lis
         decision = step(site.status, site.pending_status, site.pending_count, verdict, cfg)
 
         if stats is not None:
-            site.avg_latency_ms = round(stats.avg_latency_ms, 2)
-            site.avg_packet_loss_pct = round(stats.avg_packet_loss_pct, 3)
-            site.avg_availability_pct = round(stats.avg_availability_pct, 3)
+            site.window_latency_ms = round(stats.latency_ms, 2)
+            site.window_packet_loss_pct = round(stats.packet_loss_pct, 3)
+            site.window_availability_pct = round(stats.availability_pct, 3)
         site.status_reasons = "; ".join(verdict.reasons)
         site.pending_status = decision.pending_status
         site.pending_count = decision.pending_count
