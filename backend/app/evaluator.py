@@ -15,21 +15,13 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.alerts import Notifier, make_notifier, process_transitions
 from app.config import Settings, settings
 from app.db import SessionLocal, utcnow
-from app.health import WindowStats, classify, step
-from app.models import MetricSample, Site, SiteStatus
+from app.health import Transition, WindowStats, classify, step
+from app.models import MetricSample, Site
 
 log = logging.getLogger("network_pulse.evaluator")
-
-
-@dataclass(frozen=True)
-class Transition:
-    site_id: str
-    previous: SiteStatus
-    current: SiteStatus
-    reasons: list[str]
-    at: datetime
 
 
 @dataclass
@@ -45,6 +37,7 @@ class MonitorState:
 
 
 monitor_state = MonitorState()
+default_notifier: Notifier = make_notifier(settings.webhook_url)
 
 
 def window_stats(db: Session, since: datetime) -> dict[str, WindowStats]:
@@ -101,11 +94,12 @@ def prune_old_samples(db: Session, cfg: Settings, now: datetime | None = None) -
     return result.rowcount or 0
 
 
-def run_once(cfg: Settings = settings) -> list[Transition]:
+def run_once(cfg: Settings = settings, notifier: Notifier | None = None) -> list[Transition]:
     started = time.perf_counter()
     with SessionLocal() as db:
         try:
             transitions = evaluate_all(db, cfg)
+            process_transitions(db, transitions, notifier or default_notifier)
             if monitor_state.runs % 60 == 0:
                 prune_old_samples(db, cfg)
             monitor_state.last_error = None

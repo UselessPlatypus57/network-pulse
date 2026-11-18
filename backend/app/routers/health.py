@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db, utcnow
 from app.evaluator import monitor_state
-from app.models import Site, SiteStatus
+from app.models import Alert, AlertState, Site, SiteStatus
 from app.schemas import SiteOut
 
 router = APIRouter(prefix="/api/v1/health", tags=["health"])
@@ -25,6 +25,7 @@ class EvaluatorStatus(BaseModel):
 class HealthSummary(BaseModel):
     total: int
     counts: dict[SiteStatus, int]
+    open_alerts: int
     evaluator: EvaluatorStatus
     generated_at: datetime
 
@@ -51,6 +52,7 @@ def summary(db: Session = Depends(get_db)) -> HealthSummary:
     return HealthSummary(
         total=sum(counts.values()),
         counts=counts,
+        open_alerts=db.scalar(select(func.count()).select_from(Alert).where(Alert.state == AlertState.OPEN)) or 0,
         evaluator=evaluator_status(),
         generated_at=utcnow(),
     )

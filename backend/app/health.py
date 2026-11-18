@@ -51,6 +51,15 @@ class Verdict:
 
 
 @dataclass(frozen=True)
+class Transition:
+    site_id: str
+    previous: SiteStatus
+    current: SiteStatus
+    reasons: list[str]
+    at: datetime
+
+
+@dataclass(frozen=True)
 class Decision:
     status: SiteStatus
     pending_status: SiteStatus | None

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app import __version__
 from app.db import get_db, init_db
 from app.evaluator import evaluation_loop
-from app.routers import health, metrics, sites
+from app.routers import alerts, health, metrics, sites
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(sites.router)
     app.include_router(metrics.router)
+    app.include_router(alerts.router)
     return app
 
 
