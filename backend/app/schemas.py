@@ -29,6 +29,10 @@ class SiteOut(BaseModel):
     status: SiteStatus
     status_since: datetime
     reasons: list[str] = Field(default_factory=list, validation_alias="status_reasons")
+    pending_status: SiteStatus | None = Field(
+        default=None, description="Status the site is trending toward but has not yet been confirmed."
+    )
+    pending_count: int = 0
     last_seen_at: datetime | None
     avg_latency_ms: float | None
     avg_packet_loss_pct: float | None
