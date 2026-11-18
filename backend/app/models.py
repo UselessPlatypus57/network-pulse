@@ -35,6 +35,13 @@ class AlertState(enum.StrEnum):
     RESOLVED = "resolved"
 
 
+class FaultKind(enum.StrEnum):
+    LATENCY = "latency"  # congested backhaul: latency climbs to several hundred ms
+    PACKET_LOSS = "packet_loss"  # radio interference: heavy loss, reduced availability
+    OUTAGE = "outage"  # site stops reporting entirely (power/fiber cut)
+    FLAP = "flap"  # brief intermittent spikes -- should NOT raise an alert
+
+
 def _enum(e: type[enum.Enum], name: str) -> Enum:
     # Store enum *values* as plain strings: readable in psql and portable.
     return Enum(e, name=name, native_enum=False, values_callable=lambda x: [m.value for m in x])
@@ -98,3 +105,14 @@ class Alert(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     site: Mapped[Site] = relationship(back_populates="alerts")
+
+
+class ChaosFault(Base):
+    """An injected fault the simulator should apply to a site until it expires."""
+
+    __tablename__ = "chaos_faults"
+
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    fault: Mapped[FaultKind] = mapped_column(_enum(FaultKind, "fault_kind"))
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
