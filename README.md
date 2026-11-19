@@ -12,7 +12,9 @@ The interesting part is **telling a real outage from a blip**: a rolling-window 
 - **Health engine**: per-site status from the strict-majority median of a 30 s window, with N-of-M hysteresis (3 checks to escalate, 4 to clear). A site that stops reporting for 30 s goes OFFLINE.
 - **Unhealthy-sites endpoint**: `GET /api/v1/health/unhealthy` lists every degraded or offline site, worst first, with human-readable reasons (`latency 412ms > 150ms`).
 - **Alerts**: one alert per incident. Opens on degradation, escalates to critical when offline, resolves on recovery with the incident's duration. Optional Slack/Discord webhook.
-- **Dashboard**: summary tiles, coverage map, filterable site list, per-site latency/loss/availability charts with threshold lines, live alert feed.
+- **Uptime and MTTR**: every confirmed status change is logged, and the API reports time-weighted 24 h availability, incident count and mean time to recovery, per site and fleet-wide.
+- **Dashboard**: summary tiles (including fleet availability and MTTR), a scroll-to-zoom coverage map, filterable site list, per-site latency/loss/availability charts with threshold lines, a 24 h uptime row, and a live alert feed.
+- **Load-tested to 10,000 sites**: a scale mode in the simulator plus `scripts/benchmark.py`. Profiling found and fixed a bottleneck that made evaluation 2.6× slower (see [ARCHITECTURE.md](ARCHITECTURE.md#measured-at-scale)).
 - **Chaos testing**: inject latency, packet loss, outage or *flapping* (which should **not** alert) from the UI or API.
 - **Self-monitoring**: `/healthz`, `/readyz`, an evaluator heartbeat shown in the UI, and Prometheus `/metrics`, so you can tell when the monitor itself is broken.
 
@@ -86,6 +88,8 @@ curl localhost:8000/api/v1/health/unhealthy
 | `GET` | `/api/v1/sites[?status=&region=]` | All sites with current status and window medians |
 | `PUT` | `/api/v1/sites/{id}` | Register / update a site |
 | `GET` | `/api/v1/sites/{id}/metrics?minutes=15` | Raw time series |
+| `GET` | `/api/v1/sites/{id}/uptime?hours=24` | Availability, healthy %, incidents and MTTR for one site |
+| `GET` | `/api/v1/health/uptime?hours=24` | The same, fleet-wide (weighted by observed time) |
 | `GET` | `/api/v1/alerts[?state=open]` | Alerts, newest first |
 | `GET/PUT/DELETE` | `/api/v1/chaos[/{id}]` | List / inject / clear faults |
 | `GET` | `/healthz`, `/readyz`, `/metrics` | Liveness, readiness, Prometheus |
@@ -98,6 +102,17 @@ curl localhost:8000/api/v1/health/unhealthy
 | **Offline** | availability < 50 %, or packet loss ≥ 50 %, or **no data for 30 s** |
 
 A breach must hold in a strict majority of a 30 s window (minimum 3 samples) for 3 consecutive 5 s checks before the status changes. Clearing takes 4 checks.
+
+## Scale testing
+
+The simulator can add thousands of synthetic sites around Houston. Start the stack with them, wait about a minute for the windows to fill, then measure:
+
+```bash
+SIM_EXTRA_SITES=10000 docker compose up -d --build
+python scripts/benchmark.py --duration 60
+```
+
+In PowerShell, set the variable first: `$env:SIM_EXTRA_SITES=10000`. The benchmark uses the backend's virtualenv (it needs `httpx` and `prometheus-client`). It reads the service's own Prometheus metrics and prints evaluation time per tick, ticks per minute, ingest throughput and the dashboard's read latencies. Results and the bottleneck it found are in [ARCHITECTURE.md](ARCHITECTURE.md#measured-at-scale).
 
 See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the design and trade-offs: telling blips from outages, scaling to thousands of sites, what happens when the monitor goes down, and reducing false positives.
 

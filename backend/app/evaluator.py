@@ -98,7 +98,7 @@ def evaluate_all(
         select(
             Site.id, Site.status, Site.status_since, Site.pending_status, Site.pending_count, Site.last_seen_at,
             Site.window_latency_ms, Site.window_packet_loss_pct, Site.window_availability_pct,
-        )
+        ).order_by(Site.id)  # lock rows in id order, the same order ingest uses: no deadlocks
     ).all()
 
     for site in rows:

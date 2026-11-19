@@ -80,3 +80,14 @@ def test_detection_config_exposed(client):
     cfg = client.get("/api/v1/health/config").json()
     assert cfg["latency_degraded_ms"] == 150
     assert cfg["trip_count"] >= 1 and cfg["clear_count"] >= 1
+
+
+def test_last_seen_only_moves_forward(client):
+    """An older (backfilled or delayed) sample must not move last_seen_at back,
+    or a live site could look stale and be marked OFFLINE."""
+    client.put("/api/v1/sites/HOU-001", json=SITE)
+    newer, older = "2026-01-01T12:00:10Z", "2026-01-01T12:00:00Z"
+    client.post("/api/v1/metrics", json={"samples": [{**sample(), "ts": newer}]})
+    client.post("/api/v1/metrics", json={"samples": [{**sample(), "ts": older}]})
+    seen = client.get("/api/v1/sites/HOU-001").json()["last_seen_at"]
+    assert seen.startswith("2026-01-01T12:00:10")

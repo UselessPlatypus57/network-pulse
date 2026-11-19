@@ -26,7 +26,17 @@ flowchart LR
 | `sites` | The site registry **plus its current health** (status, since, reasons, window medians, hysteresis counters). Denormalized on purpose: the dashboard lists every site with one indexed query, and hysteresis state survives a restart. |
 | `metric_samples` | Raw time series, indexed on `(site_id, ts)`. Pruned after 24 h. |
 | `alerts` | One row per incident: severity, state (open/resolved), reason, opened/resolved times. At most one open alert per site. |
+| `status_events` | Append-only log of confirmed status transitions, written in the same transaction as the status change. One row per *transition*, not per sample, so it stays tiny. It's the history behind uptime and MTTR. |
 | `chaos_faults` | Injected faults the simulator applies. The monitor never reads this table. |
+
+### Uptime and MTTR
+
+`sites` holds the current state; `status_events` holds how it got there. Uptime is computed by [`app/uptime.py`](backend/app/uptime.py) (pure functions) as a **time-weighted integral** over that log: the time spent in each status between transitions. It deliberately doesn't count samples, because samples stop arriving during exactly the outages being measured.
+
+- **Availability** is the share of observed time *not* OFFLINE (the service was usable). **Healthy** is the share of time HEALTHY.
+- Time before a site's first status, and time UNKNOWN, isn't scored, so a site registered an hour ago isn't judged on 23 hours of nothing.
+- An **incident** is a run of unhealthy statuses: DEGRADED → OFFLINE → HEALTHY counts as one incident, matching how alerts escalate rather than re-open. Incidents belong to the window they start in; **MTTR** is the mean duration of those that also recovered.
+- Each report is built with two queries regardless of fleet size: the last transition before the window (the starting status) and all transitions inside it. The fleet figure weights every site by its observed time.
 
 ## How a status is decided
 
