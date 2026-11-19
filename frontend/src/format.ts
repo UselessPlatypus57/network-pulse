@@ -37,7 +37,20 @@ export function duration(fromIso: string, toIso?: string | null): string {
   return `${secs}s`;
 }
 
+/** Seconds -> "3m 10s" / "1h 05m" / "42s". */
+export function secs(s: number | null | undefined): string {
+  if (s == null) return "—";
+  const total = Math.round(s);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (h) return `${h}h ${String(m).padStart(2, "0")}m`;
+  if (m) return `${m}m ${String(total % 60).padStart(2, "0")}s`;
+  return `${total}s`;
+}
+
 export const fmt = {
+  /** Truncate (never round up), so 99.996% shows as 99.99%, not a misleading 100.00%. */
+  uptime: (v: number | null | undefined) => (v == null ? "—" : v >= 100 ? "100%" : `${(Math.floor(v * 100) / 100).toFixed(2)}%`),
   ms: (v: number | null) => (v == null ? "—" : `${Math.round(v)} ms`),
   pct: (v: number | null, digits = 2) => (v == null ? "—" : `${v.toFixed(digits)}%`),
   clock: (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),

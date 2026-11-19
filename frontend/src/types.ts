@@ -78,3 +78,31 @@ export interface DetectionConfig {
   stale_after_s: number;
   evaluation_interval_s: number;
 }
+
+export interface UptimeReport {
+  site_id: string;
+  hours: number;
+  window_start: string;
+  window_end: string;
+  observed_s: number;
+  seconds_by_status: Record<SiteStatus, number>;
+  available_pct: number | null;
+  healthy_pct: number | null;
+  incidents: number;
+  resolved_incidents: number;
+  mttr_s: number | null;
+  ongoing_incident_s: number | null;
+}
+
+export interface FleetUptime {
+  hours: number;
+  window_start: string;
+  window_end: string;
+  sites: number;
+  observed_s: number;
+  available_pct: number | null;
+  healthy_pct: number | null;
+  incidents: number;
+  resolved_incidents: number;
+  mttr_s: number | null;
+}

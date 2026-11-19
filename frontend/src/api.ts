@@ -1,4 +1,14 @@
-import type { Alert, DetectionConfig, Fault, FaultKind, HealthSummary, MetricPoint, Site } from "./types";
+import type {
+  Alert,
+  DetectionConfig,
+  Fault,
+  FaultKind,
+  FleetUptime,
+  HealthSummary,
+  MetricPoint,
+  Site,
+  UptimeReport,
+} from "./types";
 
 // Same-origin by default (Vite proxy in dev, nginx in Docker).
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -32,6 +42,9 @@ export const api = {
   sites: () => request<Site[]>("/api/v1/sites"),
   siteMetrics: (id: string, minutes = 15) =>
     request<MetricPoint[]>(`/api/v1/sites/${encodeURIComponent(id)}/metrics?minutes=${minutes}`),
+  siteUptime: (id: string, hours = 24) =>
+    request<UptimeReport>(`/api/v1/sites/${encodeURIComponent(id)}/uptime?hours=${hours}`),
+  fleetUptime: (hours = 24) => request<FleetUptime>(`/api/v1/health/uptime?hours=${hours}`),
   alerts: (limit = 50) => request<Alert[]>(`/api/v1/alerts?limit=${limit}`),
   faults: () => request<Fault[]>("/api/v1/chaos"),
   injectFault: (siteId: string, fault: FaultKind, durationS: number) =>

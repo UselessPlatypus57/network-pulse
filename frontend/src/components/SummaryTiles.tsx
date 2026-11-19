@@ -1,13 +1,14 @@
-import { STATUS_ICON, STATUS_LABEL, STATUS_ORDER } from "../format";
-import type { HealthSummary, SiteStatus } from "../types";
+import { STATUS_ICON, STATUS_LABEL, STATUS_ORDER, fmt, secs } from "../format";
+import type { FleetUptime, HealthSummary, SiteStatus } from "../types";
 
 interface Props {
   summary: HealthSummary | undefined;
+  uptime: FleetUptime | undefined;
   filter: SiteStatus | null;
   onFilter: (s: SiteStatus | null) => void;
 }
 
-export function SummaryTiles({ summary, filter, onFilter }: Props) {
+export function SummaryTiles({ summary, uptime, filter, onFilter }: Props) {
   const total = summary?.total ?? 0;
   return (
     <section className="tiles" aria-label="Fleet health summary">
@@ -37,6 +38,13 @@ export function SummaryTiles({ summary, filter, onFilter }: Props) {
         <span className="label">Open alerts</span>
         <span className="value num">{summary ? summary.open_alerts : "–"}</span>
         <span className="sub">one per affected site</span>
+      </div>
+      <div className="tile static" title="Share of observed time not offline, across all sites, last 24 hours">
+        <span className="label">24h availability</span>
+        <span className="value num">{fmt.uptime(uptime?.available_pct)}</span>
+        <span className="sub">
+          {uptime ? `${uptime.incidents} incident${uptime.incidents === 1 ? "" : "s"} · MTTR ${secs(uptime.mttr_s)}` : " "}
+        </span>
       </div>
     </section>
   );

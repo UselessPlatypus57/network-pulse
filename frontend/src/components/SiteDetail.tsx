@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import { STATUS_LABEL, duration, fmt, timeAgo } from "../format";
+import { STATUS_LABEL, duration, fmt, secs, timeAgo } from "../format";
 import { usePolling } from "../hooks/usePolling";
 import type { DetectionConfig, Fault, Site } from "../types";
 import { ChaosControls } from "./ChaosControls";
@@ -23,6 +23,11 @@ export function SiteDetail({ site, config, fault, onFaultsChanged, onClose }: Pr
     () => (site ? api.siteMetrics(site.id, minutes) : Promise.resolve([])),
     5000,
     [site?.id, minutes],
+  );
+  const uptime = usePolling(
+    () => (site ? api.siteUptime(site.id, 24) : Promise.resolve(undefined)),
+    15000,
+    [site?.id],
   );
 
   if (!site) {
@@ -82,6 +87,32 @@ export function SiteDetail({ site, config, fault, onFaultsChanged, onClose }: Pr
                   site.pending_status === "healthy" ? config?.clear_count ?? "?" : config?.trip_count ?? "?"
                 } checks)`
               : "Stable"}
+          </span>
+        </div>
+      </div>
+
+      <div className="card-body detail-facts uptime-facts" aria-label="Last 24 hours">
+        <div>
+          <span className="fact-label">24h availability</span>
+          <span className="num">{fmt.uptime(uptime.data?.available_pct)}</span>
+        </div>
+        <div>
+          <span className="fact-label">24h healthy</span>
+          <span className="num">{fmt.uptime(uptime.data?.healthy_pct)}</span>
+        </div>
+        <div>
+          <span className="fact-label">Incidents</span>
+          <span className="num">
+            {uptime.data ? uptime.data.incidents : "—"}
+            {uptime.data?.ongoing_incident_s != null && (
+              <span className="muted"> · 1 ongoing ({secs(uptime.data.ongoing_incident_s)})</span>
+            )}
+          </span>
+        </div>
+        <div>
+          <span className="fact-label">MTTR</span>
+          <span className="num" title="Mean time to recovery for incidents resolved in the last 24h">
+            {uptime.data ? secs(uptime.data.mttr_s) : "—"}
           </span>
         </div>
       </div>

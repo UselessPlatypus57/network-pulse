@@ -17,6 +17,7 @@ export default function App() {
   const alerts = usePolling(api.alerts, POLL_MS);
   const config = usePolling(api.config, 60_000);
   const faults = usePolling(api.faults, POLL_MS);
+  const uptime = usePolling(() => api.fleetUptime(24), 15_000);
   const [filter, setFilter] = useState<SiteStatus | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -40,7 +41,7 @@ export default function App() {
 
       <MonitorBanner summary={summary.data} error={summary.error} lastSuccess={summary.lastSuccess} />
 
-      <SummaryTiles summary={summary.data} filter={filter} onFilter={setFilter} />
+      <SummaryTiles summary={summary.data} uptime={uptime.data} filter={filter} onFilter={setFilter} />
 
       <div className="main-grid">
         <SiteMap sites={sites.data} selectedId={selectedId} onSelect={setSelectedId} />
