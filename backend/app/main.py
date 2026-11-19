@@ -14,7 +14,7 @@ from app import __version__, observability
 from app.config import settings
 from app.db import get_db, init_db
 from app.evaluator import evaluation_loop
-from app.routers import alerts, chaos, health, metrics, sites
+from app.routers import alerts, chaos, health, metrics, sites, uptime
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(alerts.router)
     app.include_router(chaos.router)
+    app.include_router(uptime.router)
     observability.install(app)
     return app
 

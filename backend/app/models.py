@@ -5,6 +5,7 @@
 - MetricSample: raw time-series readings reported for a site.
 - Alert:        one incident per site, opened when it goes unhealthy and
                 resolved when it recovers.
+- StatusEvent:  append-only log of status transitions (uptime / MTTR history).
 """
 
 from __future__ import annotations
@@ -116,3 +117,21 @@ class ChaosFault(Base):
     fault: Mapped[FaultKind] = mapped_column(_enum(FaultKind, "fault_kind"))
     started_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class StatusEvent(Base):
+    """Append-only log of status transitions: the history behind uptime/MTTR.
+
+    ``sites`` holds the *current* state; this table holds how it got there.
+    One row per confirmed transition (not per sample), so it stays tiny: a
+    site that never changes status writes nothing after its first reading.
+    """
+
+    __tablename__ = "status_events"
+    __table_args__ = (Index("ix_status_events_site_at", "site_id", "at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"))
+    at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    previous: Mapped[SiteStatus] = mapped_column(_enum(SiteStatus, "site_status"))
+    status: Mapped[SiteStatus] = mapped_column(_enum(SiteStatus, "site_status"))

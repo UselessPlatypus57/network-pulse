@@ -22,7 +22,7 @@ from app.alerts import Notifier, make_notifier, process_transitions
 from app.config import Settings, settings
 from app.db import SessionLocal, utcnow
 from app.health import Transition, WindowStats, classify, step
-from app.models import Alert, AlertSeverity, AlertState, MetricSample, Site, SiteStatus
+from app.models import Alert, AlertSeverity, AlertState, MetricSample, Site, SiteStatus, StatusEvent
 
 log = logging.getLogger("network_pulse.evaluator")
 
@@ -102,6 +102,8 @@ def evaluate_all(
 
         if decision.changed:
             transitions.append(Transition(site.id, site.status, decision.status, verdict.reasons, now))
+            # Same transaction as the status change: history can never disagree with current state.
+            db.add(StatusEvent(site_id=site.id, at=now, previous=site.status, status=decision.status))
             log.info("site %s: %s -> %s (%s)", site.id, site.status.value, decision.status.value,
                      "; ".join(verdict.reasons) or "ok")
             site.status = decision.status
