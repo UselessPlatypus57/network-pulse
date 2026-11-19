@@ -81,10 +81,20 @@ export function SiteMap({ sites, selectedId, onSelect }: Props) {
     <section className="card map-card" aria-label="Site map">
       <div className="card-header">
         <h2 className="card-title">Coverage map · Houston metro</h2>
-        <span className="muted">Click a site for details</span>
+        <span className="muted">Scroll to zoom · drag to pan · click a site for details</span>
       </div>
       <div className="map-wrap">
-        <MapContainer center={[29.76, -95.37]} zoom={10} scrollWheelZoom={false} className={`map ${scheme}`} attributionControl>
+        {/* Scroll-wheel zoom in half-level steps so a trackpad or mouse wheel feels smooth, not jumpy. */}
+        <MapContainer
+          center={[29.76, -95.37]}
+          zoom={10}
+          scrollWheelZoom
+          zoomSnap={0.5}
+          zoomDelta={0.5}
+          wheelPxPerZoomLevel={120}
+          className={`map ${scheme}`}
+          attributionControl
+        >
           <TileLayer url={TILE_URL} attribution={ATTRIBUTION} maxZoom={19} />
           <FitOnce bounds={bounds} />
           <FollowSelection site={sites?.find((s) => s.id === selectedId)} />
