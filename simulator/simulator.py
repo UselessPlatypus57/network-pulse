@@ -23,13 +23,15 @@ import os
 import random
 import signal
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import httpx
-
-from sites import SiteSpec, catalogue
+from sites import SiteSpec, catalogue, synthetic_sites
 
 log = logging.getLogger("simulator")
+
+BATCH_SIZE = 2000  # samples per POST; the API caps a batch at 5,000
 
 
 @dataclass
@@ -87,7 +89,10 @@ class SiteSim:
 
 
 class Simulator:
-    def __init__(self, api_url: str, interval_s: float, blip_rate: float, incident_rate: float, seed: int | None):
+    def __init__(
+        self, api_url: str, interval_s: float, blip_rate: float, incident_rate: float, seed: int | None,
+        extra_sites: int = 0,
+    ):
         self.api = httpx.Client(base_url=api_url.rstrip("/"), timeout=5.0)
         self.interval_s = interval_s
         self.blip_rate = blip_rate
@@ -95,7 +100,7 @@ class Simulator:
         self.rng = random.Random(seed)
         self.sites = [
             SiteSim(spec, base_latency=self.rng.uniform(22, 55), rng=random.Random(self.rng.random()))
-            for spec in catalogue()
+            for spec in catalogue() + synthetic_sites(extra_sites)
         ]
         self.running = True
 
@@ -109,14 +114,18 @@ class Simulator:
             log.info("waiting for API at %s ...", self.api.base_url)
             time.sleep(2)
 
+    def _register(self, spec: SiteSpec) -> None:
+        self.api.put(f"/api/v1/sites/{spec.id}", json={
+            "name": spec.name, "region": spec.region, "technology": spec.technology,
+            "latitude": spec.latitude, "longitude": spec.longitude,
+        }).raise_for_status()
+
     def register_sites(self) -> None:
-        for s in self.sites:
-            spec = s.spec
-            self.api.put(f"/api/v1/sites/{spec.id}", json={
-                "name": spec.name, "region": spec.region, "technology": spec.technology,
-                "latitude": spec.latitude, "longitude": spec.longitude,
-            }).raise_for_status()
-        log.info("registered %d sites", len(self.sites))
+        started = time.monotonic()
+        # Parallel PUTs so a 10,000-site scale test registers in seconds, not minutes.
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            list(pool.map(self._register, (s.spec for s in self.sites)))
+        log.info("registered %d sites in %.1fs", len(self.sites), time.monotonic() - started)
 
     def active_faults(self) -> dict[str, str]:
         try:
@@ -142,11 +151,13 @@ class Simulator:
             sample = s.sample(now, faults.get(s.spec.id))
             if sample is not None:
                 batch.append(sample)
-        if batch:
-            resp = self.api.post("/api/v1/metrics", json={"samples": batch})
+        unknown = False
+        for i in range(0, len(batch), BATCH_SIZE):
+            resp = self.api.post("/api/v1/metrics", json={"samples": batch[i : i + BATCH_SIZE]})
             resp.raise_for_status()
-            if resp.json().get("unknown_sites"):  # API lost its DB? re-register.
-                self.register_sites()
+            unknown = unknown or bool(resp.json().get("unknown_sites"))
+        if unknown:  # API lost its DB? re-register.
+            self.register_sites()
 
     def run(self) -> None:
         self.wait_for_api()
@@ -173,10 +184,13 @@ def main() -> None:
     p.add_argument("--incident-rate", type=float, default=float(os.getenv("SIM_INCIDENT_RATE", "0.0004")),
                    help="per-site, per-tick probability of a multi-minute incident (0 to disable)")
     p.add_argument("--seed", type=int, default=int(os.environ["SIM_SEED"]) if os.getenv("SIM_SEED") else None)
+    p.add_argument("--extra-sites", type=int, default=int(os.getenv("SIM_EXTRA_SITES", "0")),
+                   help="add N synthetic sites around Houston for scale testing")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    sim = Simulator(args.api, args.interval, args.blip_rate, args.incident_rate, args.seed)
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one log line per request is noise at scale
+    sim = Simulator(args.api, args.interval, args.blip_rate, args.incident_rate, args.seed, args.extra_sites)
     signal.signal(signal.SIGINT, sim.stop)
     signal.signal(signal.SIGTERM, sim.stop)
     sim.run()

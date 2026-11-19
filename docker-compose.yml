@@ -41,6 +41,7 @@ services:
       API_URL: http://api:8000
       SIM_INTERVAL_S: ${SIM_INTERVAL_S:-5}
       SIM_INCIDENT_RATE: ${SIM_INCIDENT_RATE:-0.0004}
+      SIM_EXTRA_SITES: ${SIM_EXTRA_SITES:-0}  # scale testing: add N synthetic sites
     depends_on:
       api:
         condition: service_healthy

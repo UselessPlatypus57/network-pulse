@@ -6,6 +6,7 @@ made up for the simulation and are not real tower locations.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 
 
@@ -79,3 +80,23 @@ def catalogue() -> list[SiteSpec]:
             tech = "5G" if region in ("Inner Houston", "West") or i % 3 else "LTE"
             sites.append(SiteSpec(f"{prefix}-{i:03d}", name, region, tech, lat, lon))
     return sites
+
+
+def synthetic_sites(n: int, seed: int = 42) -> list[SiteSpec]:
+    """N extra sites scattered over the Houston metro, for scale testing.
+
+    Deterministic (fixed seed), so repeated benchmark runs register the same
+    fleet. IDs are SYN-00001.. so they never collide with the real catalogue.
+    """
+    rng = random.Random(seed)
+    return [
+        SiteSpec(
+            id=f"SYN-{i:05d}",
+            name=f"Synthetic {i}",
+            region="Synthetic",
+            technology="5G" if rng.random() < 0.7 else "LTE",
+            latitude=round(rng.uniform(29.45, 30.15), 5),
+            longitude=round(rng.uniform(-95.85, -95.05), 5),
+        )
+        for i in range(1, n + 1)
+    ]
