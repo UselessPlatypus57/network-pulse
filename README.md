@@ -14,7 +14,7 @@ The interesting part is **telling a real outage from a blip**: a rolling-window 
 - **Alerts**: one alert per incident. Opens on degradation, escalates to critical when offline, resolves on recovery with the incident's duration. Optional Slack/Discord webhook.
 - **Uptime and MTTR**: every confirmed status change is logged, and the API reports time-weighted 24 h availability, incident count and mean time to recovery, per site and fleet-wide.
 - **Dashboard**: summary tiles (including fleet availability and MTTR), a scroll-to-zoom coverage map, filterable site list, per-site latency/loss/availability charts with threshold lines, a 24 h uptime row, and a live alert feed.
-- **Load-tested to 10,000 sites**: a scale mode in the simulator plus `scripts/benchmark.py`. Profiling found and fixed a bottleneck that made evaluation 2.6× slower (see [ARCHITECTURE.md](ARCHITECTURE.md#measured-at-scale)).
+- **Load-tested to 10,000 sites**: a scale mode in the simulator plus `scripts/benchmark.py`. Load testing found an ORM write bottleneck and a Postgres deadlock; after fixing both, evaluation at 10k sites went from 3.2 s to 0.9 s per tick with no lost data (see [ARCHITECTURE.md](ARCHITECTURE.md#measured-at-scale)).
 - **Chaos testing**: inject latency, packet loss, outage or *flapping* (which should **not** alert) from the UI or API.
 - **Self-monitoring**: `/healthz`, `/readyz`, an evaluator heartbeat shown in the UI, and Prometheus `/metrics`, so you can tell when the monitor itself is broken.
 

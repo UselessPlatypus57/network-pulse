@@ -88,7 +88,38 @@ Clearing is deliberately slower than tripping (4 vs 3). The dangerous failure is
 
 ### 2. How would this system handle thousands of network sites?
 
-**Current cost:** 10,000 sites reporting every 5 s is about 2,000 samples/s, and each evaluation reads about 60,000 rows (10k sites × 6 samples).
+**The load:** 10,000 sites reporting every 5 s is about 2,000 samples/s, and each evaluation reads about 60,000 rows (10k sites × 6 samples).
+
+#### Measured at scale
+
+I measured it rather than estimating it. The simulator's `SIM_EXTRA_SITES` mode adds synthetic sites, and [`scripts/benchmark.py`](scripts/benchmark.py) reads the service's own Prometheus metrics over 60 s of steady state. Final numbers, on Docker Desktop (Windows, WSL 2) with PostgreSQL 17 and the 5 s evaluation interval:
+
+| Sites | Evaluation per tick | Ticks/min (target 12) | Ingest | `POST /metrics` | `GET /sites` (size) | `GET /health/uptime` | Deadlocks / failed ticks |
+|---|---|---|---|---|---|---|---|
+| 40 | 9 ms | 12 | 8 samples/s | 9 ms | 3 ms (14 KB) | 5 ms | 0 / 0 |
+| 1,040 | 92 ms | 12 | 208 samples/s | 159 ms | 21 ms (380 KB) | 13 ms | 0 / 0 |
+| 5,040 | 427 ms | 12 | 1,008 samples/s | 254 ms | 135 ms (1.8 MB) | 47 ms | 0 / 0 |
+| 10,040 | 890 ms | 12 | 2,007 samples/s | 272 ms | 316 ms (3.7 MB) | 199 ms | 0 / 0 |
+
+The first run didn't look like that. Load testing found two problems:
+
+**1. The bottleneck wasn't where I expected.** The first version took **3.2 s per tick at 10,040 sites** and managed only 8 ticks a minute instead of 12, which stretches detection time by about 50%. I'd guessed the Python median calculation was the cost. Profiling one tick inside the API container showed otherwise:
+
+| Phase (10,040 sites, original code) | Time | Share |
+|---|---|---|
+| Window query (60,240 rows) | 155 ms | 6.5% |
+| Python grouping + medians | 80 ms | 3.4% |
+| Load `Site` ORM objects | 155 ms | 6.5% |
+| Classify + state machine | 110 ms | 4.7% |
+| **ORM flush: 10,040 separate `UPDATE`s** | **1,875 ms** | **78.9%** |
+
+The fix reads sites as plain rows and writes every change in **one bulk UPDATE** (a single executemany that psycopg 3 pipelines). Separately, the loop slept a full 5 s *after* each run, so the real period was 5 s plus the run time; it now sleeps only for the remainder of the interval.
+
+**2. Faster writes exposed a deadlock.** With evaluations overlapping ingest more often, Postgres began reporting `DeadlockDetected`. Ingest updated `sites.last_seen_at` for each batch while the evaluator updated every site, and the two locked overlapping rows **in different orders**. Postgres aborted the ingest, the simulator's batches failed, and within 30 s every site went silent and was marked OFFLINE. The fix is a **single global lock order**: both writers update `sites` in ascending `id` order. Ingest also stopped doing a read-modify-write on `last_seen_at`; one SQL `UPDATE ... CASE` only ever moves it forward, which closes a concurrent-batch race as well.
+
+Net result at 10,040 sites: **3,186 ms → 890 ms per tick (3.6× faster)**, a full 12 ticks per minute, and no deadlocks or lost batches.
+
+**What the numbers say comes next:** the evaluator now uses under 20% of its 5 s budget at 10k sites. The next bottleneck is the **dashboard**: every viewer re-downloads the full 3.7 MB site list every 3 seconds. That's why the first two items below are where I'd go next.
 
 What's already in place:
 - Batched ingestion: one request and one transaction per collector tick, not per sample.
@@ -96,12 +127,12 @@ What's already in place:
 - A composite `(site_id, ts)` index, 24 h retention, and a denormalized current-status row, so reads never scan history.
 - The dashboard's summary endpoint is a single `GROUP BY`.
 
-What I'd change, roughly in order:
-1. **Time-series storage**: TimescaleDB hypertables (or native partitioning by day), so retention is `DROP PARTITION` instead of `DELETE`. A continuous aggregate can pre-compute per-window stats.
-2. **Queue in front of ingestion** (Kafka or Kinesis), so collectors never block on the database and the system can absorb bursts and replay.
-3. **Shard the evaluator** by `hash(site_id) % N`. Each worker owns a slice of sites, coordinated with Postgres advisory locks or a lease. *Today the evaluator runs inside the API process, so running two API replicas would evaluate twice and open duplicate alerts. Splitting it into its own singleton or sharded worker is the first change before scaling out.*
-4. **Incremental evaluation**: only re-evaluate sites that received data or crossed a staleness deadline, instead of scanning the fleet.
-5. **Dashboard**: server-side filtering and pagination, marker clustering on the map, and push deltas over SSE or WebSocket instead of re-polling the full site list.
+What I'd change, roughly in order (re-ordered by what the measurements showed):
+1. **Dashboard**: push status *changes* over SSE or WebSocket, or at least use `ETag`s so an unchanged poll costs a `304`, instead of re-sending the whole 3.7 MB site list every 3 s. Add server-side filtering and pagination, and marker clustering on the map.
+2. **Write less per tick**: the evaluator rewrites every site's window medians on every tick. Writing only rows whose *status* changed, and serving live medians from the window query or a cache, would cut the bulk write to a handful of rows.
+3. **Run the evaluator on its own**, and shard it by `hash(site_id) % N`, with each worker owning a slice of sites, coordinated with Postgres advisory locks or a lease. *Today the evaluator runs inside the API process, so running two API replicas would evaluate twice and open duplicate alerts. Splitting it into its own singleton or sharded worker is the first change before scaling out.*
+4. **Time-series storage**: TimescaleDB hypertables (or native partitioning by day), so retention is `DROP PARTITION` instead of `DELETE`. A continuous aggregate can pre-compute per-window stats.
+5. **Queue in front of ingestion** (Kafka or Kinesis), so collectors never block on the database and the system can absorb bursts and replay.
 
 ### 3. What happens if the monitoring service itself goes down?
 
