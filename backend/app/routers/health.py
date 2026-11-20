@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db, utcnow
 from app.evaluator import monitor_state
-from app.models import Alert, AlertState, Site, SiteStatus
+from app.leader import INSTANCE_ID
+from app.models import Alert, AlertState, EvaluatorHeartbeat, Site, SiteStatus
 from app.schemas import SiteOut
 
 router = APIRouter(prefix="/api/v1/health", tags=["health"])
@@ -20,6 +21,10 @@ class EvaluatorStatus(BaseModel):
     last_duration_ms: float | None
     last_error: str | None
     interval_s: float
+    leader: str | None = None
+    leader_since: datetime | None = None
+    served_by: str
+    served_by_role: str
 
 
 class HealthSummary(BaseModel):
@@ -30,16 +35,23 @@ class HealthSummary(BaseModel):
     generated_at: datetime
 
 
-def evaluator_status() -> EvaluatorStatus:
-    last = monitor_state.last_run_at
-    # "running" = evaluated recently. 3 missed intervals means the loop is stuck.
+def evaluator_status(db: Session) -> EvaluatorStatus:
+    """Read liveness from the shared heartbeat row, not this process's memory:
+    behind a load balancer the replica answering is usually not the leader."""
+    hb = db.get(EvaluatorHeartbeat, 1)
+    last = hb.last_run_at if hb else None
+    # "running" = some replica evaluated recently. 3 missed intervals means stuck or leaderless.
     running = last is not None and (utcnow() - last).total_seconds() < settings.evaluation_interval_s * 3
     return EvaluatorStatus(
-        running=running and monitor_state.last_error is None,
+        running=running and not (hb and hb.last_error),
         last_run_at=last,
-        last_duration_ms=monitor_state.last_duration_ms,
-        last_error=monitor_state.last_error,
+        last_duration_ms=hb.last_duration_ms if hb else None,
+        last_error=hb.last_error if hb else None,
         interval_s=settings.evaluation_interval_s,
+        leader=hb.leader if hb else None,
+        leader_since=hb.leader_since if hb else None,
+        served_by=INSTANCE_ID,
+        served_by_role=monitor_state.role,
     )
 
 
@@ -53,7 +65,7 @@ def summary(db: Session = Depends(get_db)) -> HealthSummary:
         total=sum(counts.values()),
         counts=counts,
         open_alerts=db.scalar(select(func.count()).select_from(Alert).where(Alert.state == AlertState.OPEN)) or 0,
-        evaluator=evaluator_status(),
+        evaluator=evaluator_status(db),
         generated_at=utcnow(),
     )
 

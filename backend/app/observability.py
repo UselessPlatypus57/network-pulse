@@ -31,6 +31,7 @@ EVALUATION_ERRORS = Counter("network_pulse_evaluation_errors_total", "Evaluation
 EVALUATION_LAST_SUCCESS = Gauge(
     "network_pulse_evaluation_last_success_timestamp_seconds", "Unix time of the last successful evaluation"
 )
+IS_LEADER = Gauge("network_pulse_evaluator_is_leader", "1 if this replica currently leads evaluation")
 TRANSITIONS = Counter("network_pulse_status_transitions_total", "Site status changes", ["to"])
 NOTIFICATIONS = Counter("network_pulse_alert_notifications_total", "Webhook deliveries", ["result"])
 

@@ -135,3 +135,21 @@ class StatusEvent(Base):
     at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
     previous: Mapped[SiteStatus] = mapped_column(_enum(SiteStatus, "site_status"))
     status: Mapped[SiteStatus] = mapped_column(_enum(SiteStatus, "site_status"))
+
+
+class EvaluatorHeartbeat(Base):
+    """A single row, written each tick by whichever replica currently leads.
+
+    Liveness has to live in the database, not in process memory: with several
+    replicas behind a load balancer, the replica answering /health/summary is
+    usually *not* the one evaluating.
+    """
+
+    __tablename__ = "evaluator_heartbeat"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # always 1
+    leader: Mapped[str] = mapped_column(String(128))
+    leader_since: Mapped[datetime] = mapped_column(UTCDateTime)
+    last_run_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    last_duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)

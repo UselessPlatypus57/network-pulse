@@ -20,9 +20,19 @@ from sqlalchemy.orm import Session
 from app import observability as obs
 from app.alerts import Notifier, make_notifier, process_transitions
 from app.config import Settings, settings
-from app.db import SessionLocal, utcnow
+from app.db import SessionLocal, engine, utcnow
 from app.health import Transition, WindowStats, classify, step
-from app.models import Alert, AlertSeverity, AlertState, MetricSample, Site, SiteStatus, StatusEvent
+from app.leader import INSTANCE_ID, LeaderLock
+from app.models import (
+    Alert,
+    AlertSeverity,
+    AlertState,
+    EvaluatorHeartbeat,
+    MetricSample,
+    Site,
+    SiteStatus,
+    StatusEvent,
+)
 
 log = logging.getLogger("network_pulse.evaluator")
 
@@ -37,9 +47,12 @@ class MonitorState:
     last_duration_ms: float | None = None
     last_error: str | None = None
     runs: int = 0
+    role: str = "starting"  # "leader" | "follower"
+    leader_since: datetime | None = None
 
 
 monitor_state = MonitorState()
+leader_lock = LeaderLock(engine)
 default_notifier: Notifier = make_notifier(settings.webhook_url)
 
 
@@ -155,6 +168,35 @@ def update_gauges(db: Session) -> None:
         obs.OPEN_ALERTS.labels(sev.value).set(open_by_sev.get(sev, 0))
 
 
+def write_heartbeat() -> None:
+    """Publish this tick to the shared heartbeat row. Uses a fresh session,
+    because the evaluation's own session may have been rolled back."""
+    try:
+        with SessionLocal() as db:
+            hb = db.get(EvaluatorHeartbeat, 1) or EvaluatorHeartbeat(id=1)
+            hb.leader = INSTANCE_ID
+            hb.leader_since = monitor_state.leader_since or utcnow()
+            hb.last_run_at = monitor_state.last_run_at or utcnow()
+            hb.last_duration_ms = monitor_state.last_duration_ms
+            hb.last_error = monitor_state.last_error
+            db.add(hb)
+            db.commit()
+    except Exception:
+        log.exception("could not write evaluator heartbeat")
+
+
+def _set_role(is_leader: bool) -> None:
+    role = "leader" if is_leader else "follower"
+    if role != monitor_state.role:
+        if is_leader:
+            monitor_state.leader_since = utcnow()
+            log.info("%s became the evaluation leader", INSTANCE_ID)
+        else:
+            log.info("%s standing by as a follower (another replica leads)", INSTANCE_ID)
+        monitor_state.role = role
+    obs.IS_LEADER.set(1 if is_leader else 0)
+
+
 def run_once(cfg: Settings = settings, notifier: Notifier | None = None) -> list[Transition]:
     started = time.perf_counter()
     with SessionLocal() as db:
@@ -181,14 +223,23 @@ def run_once(cfg: Settings = settings, notifier: Notifier | None = None) -> list
             elapsed = time.perf_counter() - started
             obs.EVALUATION_DURATION.observe(elapsed)
             monitor_state.last_duration_ms = round(elapsed * 1000, 2)
+            write_heartbeat()
 
 
 async def evaluation_loop(cfg: Settings = settings) -> None:
     log.info("evaluator started (every %ss, window %ss)", cfg.evaluation_interval_s, cfg.window_s)
-    while True:
-        started = time.monotonic()
-        await asyncio.to_thread(run_once, cfg)
-        # Sleep only for what's left of the interval, so ticks stay on a fixed
-        # cadence. (Sleeping a full interval *after* each run made the real period
-        # interval + run time: 10 ticks/min instead of 12 at 10k sites.)
-        await asyncio.sleep(max(0.0, cfg.evaluation_interval_s - (time.monotonic() - started)))
+    try:
+        while True:
+            started = time.monotonic()
+            is_leader = await asyncio.to_thread(leader_lock.ensure)
+            _set_role(is_leader)
+            if is_leader:
+                await asyncio.to_thread(run_once, cfg)
+            # Sleep only for what's left of the interval, so ticks stay on a fixed
+            # cadence. (Sleeping a full interval *after* each run made the real period
+            # interval + run time: 10 ticks/min instead of 12 at 10k sites.)
+            await asyncio.sleep(max(0.0, cfg.evaluation_interval_s - (time.monotonic() - started)))
+    finally:
+        # Graceful shutdown: release the lock so a follower takes over on its next
+        # tick, rather than waiting for this connection to be noticed as dead.
+        await asyncio.to_thread(leader_lock.release)
