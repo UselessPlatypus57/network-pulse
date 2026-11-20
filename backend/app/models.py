@@ -13,7 +13,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import Enum, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Enum, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, UTCDateTime, utcnow
@@ -94,7 +94,16 @@ class MetricSample(Base):
 
 class Alert(Base):
     __tablename__ = "alerts"
-    __table_args__ = (Index("ix_alerts_site_state", "site_id", "state"),)
+    __table_args__ = (
+        Index("ix_alerts_site_state", "site_id", "state"),
+        # The "one open alert per site" invariant, enforced by the database rather
+        # than trusted to application code: even a brief overlap between two
+        # evaluators during a leader handover can't open a duplicate page.
+        Index(
+            "uq_alerts_one_open_per_site", "site_id", unique=True,
+            postgresql_where=text("state = 'open'"), sqlite_where=text("state = 'open'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     site_id: Mapped[str] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"))

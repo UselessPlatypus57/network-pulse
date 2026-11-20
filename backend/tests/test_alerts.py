@@ -1,6 +1,7 @@
 """End-to-end evaluation: samples in the DB -> status transitions -> alerts."""
 
 import httpx
+import pytest
 
 from app.alerts import AlertEvent, WebhookNotifier, process_transitions
 from app.evaluator import evaluate_all
@@ -178,3 +179,19 @@ def test_monitor_restart_does_not_mark_every_site_offline(db, cfg, notifier):
     assert statuses["S-4"] == SiteStatus.OFFLINE  # caught once we'd listened long enough
     assert [st for sid, st in statuses.items() if sid != "S-4"] == [SiteStatus.HEALTHY] * 4
     assert notifier.kinds == ["opened"]
+
+
+def test_database_rejects_a_second_open_alert_for_a_site(db):
+    """The one-open-alert invariant is a partial unique index, not just app logic."""
+    from sqlalchemy.exc import IntegrityError
+
+    site = add_site(db)
+    db.add(Alert(site_id=site.id, severity=AlertSeverity.WARNING, state=AlertState.RESOLVED, opened_at=T0))
+    db.add(Alert(site_id=site.id, severity=AlertSeverity.WARNING, state=AlertState.RESOLVED, opened_at=T0))
+    db.add(Alert(site_id=site.id, severity=AlertSeverity.WARNING, state=AlertState.OPEN, opened_at=T0))
+    db.commit()  # any number of resolved alerts, plus one open: fine
+
+    db.add(Alert(site_id=site.id, severity=AlertSeverity.CRITICAL, state=AlertState.OPEN, opened_at=T0))
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
