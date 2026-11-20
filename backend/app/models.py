@@ -24,6 +24,7 @@ class SiteStatus(enum.StrEnum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     OFFLINE = "offline"
+    MAINTENANCE = "maintenance"  # planned work: no alerts, excluded from uptime
 
 
 class AlertSeverity(enum.StrEnum):
@@ -63,6 +64,10 @@ class Site(Base):
     status: Mapped[SiteStatus] = mapped_column(_enum(SiteStatus, "site_status"), default=SiteStatus.UNKNOWN)
     status_since: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     status_reasons: Mapped[str] = mapped_column(Text, default="")  # "; "-joined
+
+    # Planned maintenance window. Written only by the API, never by the evaluator
+    # (whose bulk UPDATE would otherwise overwrite a window started mid-tick).
+    maintenance_until: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     # Hysteresis bookkeeping: the status we are *considering* moving to.
     pending_status: Mapped[SiteStatus | None] = mapped_column(_enum(SiteStatus, "site_status"), nullable=True)

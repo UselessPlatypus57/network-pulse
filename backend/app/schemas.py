@@ -33,6 +33,7 @@ class SiteOut(BaseModel):
         default=None, description="Status the site is trending toward but has not yet been confirmed."
     )
     pending_count: int = 0
+    maintenance_until: datetime | None = None
     last_seen_at: datetime | None
     window_latency_ms: float | None
     window_packet_loss_pct: float | None

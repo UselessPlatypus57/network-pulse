@@ -27,6 +27,7 @@ from app.models import SiteStatus
 
 RANK = {
     SiteStatus.UNKNOWN: -1,
+    SiteStatus.MAINTENANCE: -1,  # never compared: maintenance bypasses the state machine
     SiteStatus.HEALTHY: 0,
     SiteStatus.DEGRADED: 1,
     SiteStatus.OFFLINE: 2,

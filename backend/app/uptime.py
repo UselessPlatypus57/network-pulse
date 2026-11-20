@@ -7,7 +7,8 @@ trying to measure.
 
 Definitions (over a window [start, end)):
 
-- observed time  -- time with a known status. UNKNOWN (never reported) and any
+- observed time  -- time with a known status. UNKNOWN (never reported), planned
+                    MAINTENANCE (as an SLA would) and any
                     time before the site's first recorded status are excluded,
                     so a site registered an hour ago isn't scored on 23 hours
                     of nothing.
@@ -28,6 +29,8 @@ from datetime import datetime
 from app.models import SiteStatus
 
 UNHEALTHY = frozenset({SiteStatus.DEGRADED, SiteStatus.OFFLINE})
+#: Statuses that aren't scored: no data yet, or planned downtime (SLAs exclude it).
+NOT_SCORED = frozenset({SiteStatus.UNKNOWN, SiteStatus.MAINTENANCE})
 
 
 @dataclass
@@ -42,7 +45,7 @@ class UptimeReport:
 
     @property
     def observed_s(self) -> float:
-        return sum(v for s, v in self.seconds_by_status.items() if s != SiteStatus.UNKNOWN)
+        return sum(v for s, v in self.seconds_by_status.items() if s not in NOT_SCORED)
 
     @property
     def available_pct(self) -> float | None:

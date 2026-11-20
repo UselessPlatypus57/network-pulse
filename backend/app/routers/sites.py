@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -48,6 +49,36 @@ def upsert_site(site_id: str, body: SiteUpsert, db: Session = Depends(get_db)) -
         setattr(site, field, value)
     db.commit()
     db.refresh(site)
+    return site
+
+
+class MaintenanceIn(BaseModel):
+    minutes: int = Field(60, ge=1, le=24 * 60, description="Window length, starting now.")
+
+
+@router.put("/{site_id}/maintenance", response_model=SiteOut)
+def start_maintenance(site_id: str, body: MaintenanceIn, db: Session = Depends(get_db)) -> Site:
+    """Start (or extend/replace) a planned maintenance window.
+
+    Only ``maintenance_until`` is written; the evaluator applies the MAINTENANCE
+    status on its next tick, so status keeps a single writer.
+    """
+    site = _get_site_or_404(db, site_id)
+    site.maintenance_until = utcnow() + timedelta(minutes=body.minutes)
+    db.commit()
+    db.refresh(site)
+    return site
+
+
+@router.delete("/{site_id}/maintenance", response_model=SiteOut)
+def end_maintenance(site_id: str, db: Session = Depends(get_db)) -> Site:
+    """End maintenance now. The site is re-judged from scratch on the next tick."""
+    site = _get_site_or_404(db, site_id)
+    now = utcnow()
+    if site.maintenance_until is not None and site.maintenance_until > now:
+        site.maintenance_until = now
+        db.commit()
+        db.refresh(site)
     return site
 
 

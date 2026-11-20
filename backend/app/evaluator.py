@@ -111,29 +111,44 @@ def evaluate_all(
         select(
             Site.id, Site.status, Site.status_since, Site.pending_status, Site.pending_count, Site.last_seen_at,
             Site.window_latency_ms, Site.window_packet_loss_pct, Site.window_availability_pct,
+            Site.maintenance_until,
         ).order_by(Site.id)  # lock rows in id order, the same order ingest uses: no deadlocks
     ).all()
 
     for site in rows:
         stats = stats_by_site.get(site.id)
-        verdict = classify(stats, site.last_seen_at, now, cfg, listening_since)
-        decision = step(site.status, site.pending_status, site.pending_count, verdict, cfg)
 
-        if decision.changed:
-            transitions.append(Transition(site.id, site.status, decision.status, verdict.reasons, now))
+        if site.maintenance_until is not None and now < site.maintenance_until:
+            # Planned work: hold MAINTENANCE regardless of metrics, so nothing trips or pages.
+            reasons = [f"planned maintenance until {site.maintenance_until:%H:%M} UTC"]
+            new_status, pending_status, pending_count = SiteStatus.MAINTENANCE, None, 0
+        else:
+            verdict = classify(stats, site.last_seen_at, now, cfg, listening_since)
+            # A site leaving maintenance is judged from scratch, like a new site: its first
+            # verdict is adopted immediately, so if the work broke it, that alerts right away.
+            current = SiteStatus.UNKNOWN if site.status == SiteStatus.MAINTENANCE else site.status
+            decision = step(current, site.pending_status, site.pending_count, verdict, cfg)
+            reasons = verdict.reasons
+            new_status, pending_status, pending_count = (
+                decision.status, decision.pending_status, decision.pending_count,
+            )
+
+        changed = new_status != site.status
+        if changed:
+            transitions.append(Transition(site.id, site.status, new_status, reasons, now))
             # Same transaction as the status change: history can never disagree with current state.
-            db.add(StatusEvent(site_id=site.id, at=now, previous=site.status, status=decision.status))
-            log.info("site %s: %s -> %s (%s)", site.id, site.status.value, decision.status.value,
-                     "; ".join(verdict.reasons) or "ok")
+            db.add(StatusEvent(site_id=site.id, at=now, previous=site.status, status=new_status))
+            log.info("site %s: %s -> %s (%s)", site.id, site.status.value, new_status.value,
+                     "; ".join(reasons) or "ok")
 
         # Every row carries the same keys, so SQLAlchemy sends one executemany batch.
         updates.append({
             "id": site.id,
-            "status": decision.status,
-            "status_since": now if decision.changed else site.status_since,
-            "status_reasons": "; ".join(verdict.reasons),
-            "pending_status": decision.pending_status,
-            "pending_count": decision.pending_count,
+            "status": new_status,
+            "status_since": now if changed else site.status_since,
+            "status_reasons": "; ".join(reasons),
+            "pending_status": pending_status,
+            "pending_count": pending_count,
             "window_latency_ms": round(stats.latency_ms, 2) if stats else site.window_latency_ms,
             "window_packet_loss_pct": round(stats.packet_loss_pct, 3) if stats else site.window_packet_loss_pct,
             "window_availability_pct": round(stats.availability_pct, 3) if stats else site.window_availability_pct,
