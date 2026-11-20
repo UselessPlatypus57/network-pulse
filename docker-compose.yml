@@ -1,6 +1,8 @@
 # Network Pulse — full stack.
 #   docker compose up --build
-# Dashboard: http://localhost:8080   API docs: http://localhost:8000/docs
+#   docker compose up --build --scale api=2     # two API replicas, one elected evaluator
+# Dashboard: http://localhost:8080   API docs: http://localhost:8080/docs
+# (The API is reached through nginx on 8080, so it can run as several replicas.)
 
 services:
   db:
@@ -31,8 +33,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8000:8000"
+    # No host port: several replicas can't all bind 8000. nginx (dashboard) proxies
+    # /api, /docs, /metrics and the health checks to whichever replicas are up.
+    expose:
+      - "8000"
     restart: unless-stopped
 
   simulator:

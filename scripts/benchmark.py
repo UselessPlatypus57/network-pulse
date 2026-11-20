@@ -65,7 +65,7 @@ def timed_get(client: httpx.Client, path: str, n: int = 5) -> tuple[float, int]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--api", default="http://localhost:8000")
+    p.add_argument("--api", default="http://localhost:8080")
     p.add_argument("--duration", type=float, default=60.0)
     args = p.parse_args()
 
