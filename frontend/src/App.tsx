@@ -62,6 +62,10 @@ export default function App() {
           config={config.data}
           fault={faults.data?.find((f) => f.site_id === selectedId)}
           onFaultsChanged={faults.refresh}
+          onSiteChanged={() => {
+            sites.refresh();
+            summary.refresh();
+          }}
           onClose={() => setSelectedId(null)}
         />
         <AlertFeed alerts={alerts.data} onSelectSite={setSelectedId} />

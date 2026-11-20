@@ -5,6 +5,7 @@ export const STATUS_LABEL: Record<SiteStatus, string> = {
   degraded: "Degraded",
   offline: "Offline",
   unknown: "Unknown",
+  maintenance: "Maintenance",
 };
 
 // Status is never carried by color alone: every use pairs it with this glyph + label.
@@ -13,9 +14,10 @@ export const STATUS_ICON: Record<SiteStatus, string> = {
   degraded: "▲",
   offline: "✕",
   unknown: "○",
+  maintenance: "◆",
 };
 
-export const STATUS_ORDER: SiteStatus[] = ["offline", "degraded", "healthy", "unknown"];
+export const STATUS_ORDER: SiteStatus[] = ["offline", "degraded", "maintenance", "healthy", "unknown"];
 
 export function timeAgo(iso: string | null | undefined, now = Date.now()): string {
   if (!iso) return "never";

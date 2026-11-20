@@ -1,6 +1,6 @@
 // Mirrors the FastAPI response schemas (backend/app/schemas.py & routers).
 
-export type SiteStatus = "unknown" | "healthy" | "degraded" | "offline";
+export type SiteStatus = "unknown" | "healthy" | "degraded" | "offline" | "maintenance";
 export type AlertSeverity = "warning" | "critical";
 export type AlertState = "open" | "resolved";
 export type FaultKind = "latency" | "packet_loss" | "outage" | "flap";
@@ -17,6 +17,7 @@ export interface Site {
   reasons: string[];
   pending_status: SiteStatus | null;
   pending_count: number;
+  maintenance_until: string | null;
   last_seen_at: string | null;
   window_latency_ms: number | null;
   window_packet_loss_pct: number | null;
@@ -29,6 +30,10 @@ export interface EvaluatorStatus {
   last_duration_ms: number | null;
   last_error: string | null;
   interval_s: number;
+  leader: string | null;
+  leader_since: string | null;
+  served_by: string;
+  served_by_role: string;
 }
 
 export interface HealthSummary {

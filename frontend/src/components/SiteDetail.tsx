@@ -4,6 +4,7 @@ import { STATUS_LABEL, duration, fmt, secs, timeAgo } from "../format";
 import { usePolling } from "../hooks/usePolling";
 import type { DetectionConfig, Fault, Site } from "../types";
 import { ChaosControls } from "./ChaosControls";
+import { MaintenanceControls } from "./MaintenanceControls";
 import { MetricChart } from "./MetricChart";
 import { StatusBadge } from "./StatusBadge";
 
@@ -12,12 +13,13 @@ interface Props {
   config: DetectionConfig | undefined;
   fault: Fault | undefined;
   onFaultsChanged: () => void;
+  onSiteChanged: () => void;
   onClose: () => void;
 }
 
 const RANGES = [15, 60] as const;
 
-export function SiteDetail({ site, config, fault, onFaultsChanged, onClose }: Props) {
+export function SiteDetail({ site, config, fault, onFaultsChanged, onSiteChanged, onClose }: Props) {
   const [minutes, setMinutes] = useState<(typeof RANGES)[number]>(15);
   const metrics = usePolling(
     () => (site ? api.siteMetrics(site.id, minutes) : Promise.resolve([])),
@@ -155,6 +157,7 @@ export function SiteDetail({ site, config, fault, onFaultsChanged, onClose }: Pr
           lowerIsWorse
         />
       </div>
+      <MaintenanceControls site={site} onChange={onSiteChanged} />
       <ChaosControls siteId={site.id} fault={fault} onChange={onFaultsChanged} />
 
       {config && (

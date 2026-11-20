@@ -20,6 +20,7 @@
   --status-degraded: #fab219;
   --status-offline: #d03b3b;
   --status-unknown: #898781;
+  --status-maintenance: #9085e9;
   --on-degraded: #0b0b0b;
 
   --radius: 10px;
@@ -43,6 +44,7 @@
     --grid: #e1e0d9;
     --axis: #c3c2b7;
     --accent: #2a78d6;
+    --status-maintenance: #6250d6;
   }
 }
 
@@ -118,8 +120,8 @@ button { cursor: pointer; }
 .banner strong { display: block; }
 
 /* ---- Summary tiles ------------------------------------------------------ */
-.tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--gap); }
-@media (max-width: 1200px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.tiles { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--gap); }
+@media (max-width: 1200px) { .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .tile {
   text-align: left; padding: 14px 16px; background: var(--surface-1);
@@ -141,6 +143,7 @@ button { cursor: pointer; }
 .status.degraded .icon { color: var(--status-degraded); }
 .status.offline .icon { color: var(--status-offline); }
 .status.unknown .icon { color: var(--status-unknown); }
+.status.maintenance .icon { color: var(--status-maintenance); }
 
 /* ---- Site list ---------------------------------------------------------- */
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -270,3 +273,10 @@ table.sites tbody tr[aria-selected="true"] { background: color-mix(in srgb, var(
 .chaos-pill { color: var(--text-primary); }
 
 .uptime-facts { border-top: 1px solid var(--border); padding-top: 10px; }
+
+/* ---- Maintenance controls ----------------------------------------------- */
+.maint { margin: 8px 14px 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); }
+.maint.active {
+  border-color: color-mix(in srgb, var(--status-maintenance) 55%, transparent);
+  background: color-mix(in srgb, var(--status-maintenance) 12%, var(--surface-1));
+}

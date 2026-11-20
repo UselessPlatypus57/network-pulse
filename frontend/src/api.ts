@@ -45,6 +45,13 @@ export const api = {
   siteUptime: (id: string, hours = 24) =>
     request<UptimeReport>(`/api/v1/sites/${encodeURIComponent(id)}/uptime?hours=${hours}`),
   fleetUptime: (hours = 24) => request<FleetUptime>(`/api/v1/health/uptime?hours=${hours}`),
+  startMaintenance: (siteId: string, minutes: number) =>
+    request<Site>(`/api/v1/sites/${encodeURIComponent(siteId)}/maintenance`, {
+      method: "PUT",
+      body: JSON.stringify({ minutes }),
+    }),
+  endMaintenance: (siteId: string) =>
+    request<Site>(`/api/v1/sites/${encodeURIComponent(siteId)}/maintenance`, { method: "DELETE" }),
   alerts: (limit = 50) => request<Alert[]>(`/api/v1/alerts?limit=${limit}`),
   faults: () => request<Fault[]>("/api/v1/chaos"),
   injectFault: (siteId: string, fault: FaultKind, durationS: number) =>

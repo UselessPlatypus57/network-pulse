@@ -15,17 +15,30 @@ function mode({ summary, error }: Props): Mode {
   return summary.evaluator.running ? "live" : "stale";
 }
 
+/** "hostname:pid" -> short container id, e.g. "3f2a1c". */
+const shortId = (id: string | null | undefined) => (id ? id.split(":")[0].slice(0, 6) : "?");
+
 /** Header pill: is the *monitor itself* healthy? */
 export function MonitorPill(props: Props) {
   const m = mode(props);
   const text = {
-    live: `Live · evaluated ${timeAgo(props.summary?.evaluator.last_run_at)}`,
+    live: `Live · evaluated ${timeAgo(props.summary?.evaluator.last_run_at)} · leader ${shortId(
+      props.summary?.evaluator.leader,
+    )}`,
     stale: "Evaluator stalled",
     down: "API unreachable",
     loading: "Connecting…",
   }[m];
   return (
-    <span className={`pill ${m}`} role="status">
+    <span
+      className={`pill ${m}`}
+      role="status"
+      title={
+        props.summary
+          ? `Evaluation leader: ${props.summary.evaluator.leader ?? "none"}\n` + `This response served by: ${props.summary.evaluator.served_by} (${props.summary.evaluator.served_by_role})`
+          : undefined
+      }
+    >
       <span className="dot" aria-hidden />
       {text}
     </span>

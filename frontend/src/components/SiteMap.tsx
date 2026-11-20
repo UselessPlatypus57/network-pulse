@@ -13,7 +13,7 @@ interface Props {
 }
 
 // Draw healthy first so problems always sit on top of the stack.
-const Z: Record<SiteStatus, number> = { unknown: 0, healthy: 1, degraded: 2, offline: 3 };
+const Z: Record<SiteStatus, number> = { unknown: 0, healthy: 1, maintenance: 2, degraded: 3, offline: 4 };
 
 // Standard OSM tiles (no API key). Dark mode re-inks them with a CSS filter on
 // the tile pane (see .map.dark in styles.css) rather than a second provider.
@@ -50,6 +50,7 @@ export function SiteMap({ sites, selectedId, onSelect }: Props) {
       degraded: cssVar("--status-degraded"),
       offline: cssVar("--status-offline"),
       unknown: cssVar("--status-unknown"),
+      maintenance: cssVar("--status-maintenance"),
       ring: cssVar("--surface-1"),
       accent: cssVar("--accent"),
     }),
@@ -72,7 +73,7 @@ export function SiteMap({ sites, selectedId, onSelect }: Props) {
     [sites, selectedId],
   );
   const counts = useMemo(() => {
-    const c: Record<SiteStatus, number> = { healthy: 0, degraded: 0, offline: 0, unknown: 0 };
+    const c: Record<SiteStatus, number> = { healthy: 0, degraded: 0, offline: 0, unknown: 0, maintenance: 0 };
     sites?.forEach((s) => c[s.status]++);
     return c;
   }, [sites]);
