@@ -25,9 +25,10 @@ flowchart LR
 |---|---|
 | `sites` | The site registry **plus its current health** (status, since, reasons, window medians, hysteresis counters). Denormalized on purpose: the dashboard lists every site with one indexed query, and hysteresis state survives a restart. |
 | `metric_samples` | Raw time series, indexed on `(site_id, ts)`. Pruned after 24 h. |
-| `alerts` | One row per incident: severity, state (open/resolved), reason, opened/resolved times. At most one open alert per site. |
+| `alerts` | One row per incident: severity, state (open/resolved), reason, opened/resolved times. At most one open alert per site, **enforced by the database** with a partial unique index (`UNIQUE (site_id) WHERE state = 'open'`). |
 | `status_events` | Append-only log of confirmed status transitions, written in the same transaction as the status change. One row per *transition*, not per sample, so it stays tiny. It's the history behind uptime and MTTR. |
 | `chaos_faults` | Injected faults the simulator applies. The monitor never reads this table. |
+| `evaluator_heartbeat` | One row, written each tick by whichever replica leads evaluation. Liveness has to live in the database: behind a load balancer, the replica answering `/health/summary` usually isn't the one evaluating. |
 
 ### Uptime and MTTR
 
@@ -50,6 +51,8 @@ stateDiagram-v2
     DEGRADED --> HEALTHY: 4 consecutive good checks
     OFFLINE --> HEALTHY: 4 consecutive good checks
     OFFLINE --> DEGRADED: 4 consecutive better checks
+    HEALTHY --> MAINTENANCE: window starts
+    MAINTENANCE --> UNKNOWN: window ends, re-judged from scratch
 ```
 
 Each 5 s evaluation:
@@ -130,7 +133,7 @@ What's already in place:
 What I'd change, roughly in order (re-ordered by what the measurements showed):
 1. **Dashboard**: push status *changes* over SSE or WebSocket, or at least use `ETag`s so an unchanged poll costs a `304`, instead of re-sending the whole 3.7 MB site list every 3 s. Add server-side filtering and pagination, and marker clustering on the map.
 2. **Write less per tick**: the evaluator rewrites every site's window medians on every tick. Writing only rows whose *status* changed, and serving live medians from the window query or a cache, would cut the bulk write to a handful of rows.
-3. **Run the evaluator on its own**, and shard it by `hash(site_id) % N`, with each worker owning a slice of sites, coordinated with Postgres advisory locks or a lease. *Today the evaluator runs inside the API process, so running two API replicas would evaluate twice and open duplicate alerts. Splitting it into its own singleton or sharded worker is the first change before scaling out.*
+3. **Shard the evaluator** by `hash(site_id) % N`, with each worker owning a slice of sites. Today the API already runs as several replicas with **exactly one elected evaluator** (see Q3); sharding would let evaluation itself scale past one leader.
 4. **Time-series storage**: TimescaleDB hypertables (or native partitioning by day), so retention is `DROP PARTITION` instead of `DELETE`. A continuous aggregate can pre-compute per-window stats.
 5. **Queue in front of ingestion** (Kafka or Kinesis), so collectors never block on the database and the system can absorb bursts and replay.
 
@@ -140,15 +143,17 @@ The worst failure for a monitor is **silently showing "all green" while it's dea
 
 | Failure | Behaviour |
 |---|---|
-| API process dies | Docker `restart: unless-stopped` and a `/readyz` healthcheck restart it. The dashboard shows a red **"Monitoring API unreachable"** banner and keeps the last data visible, labelled as stale. |
-| Evaluator loop stalls or errors (API still up) | `/api/v1/health/summary` reports `evaluator.running = false` and the last error. The dashboard shows **"Health evaluator is not running — statuses are frozen."** |
+| **Evaluating replica dies** | Run with `--scale api=2`. Every replica runs the evaluation loop, but only the holder of a **session-level Postgres advisory lock** evaluates. The lock belongs to the leader's database connection, so if the process dies, Postgres releases it and a follower takes over on its next tick. No ZooKeeper or etcd: the database we already depend on is the arbiter. **Measured: after `docker kill` on the leader, the follower took over in 6.4 s, all 40 sites stayed healthy and no alert fired.** The killed replica rejoined as a follower. |
+| Two leaders briefly overlap during a handover | The partial unique index means the database rejects a second open alert for a site, so the worst case is a rejected duplicate, not a duplicate page. |
+| Every API replica dies | Docker `restart: unless-stopped` and a `/readyz` healthcheck restart them. The dashboard shows a red **"Monitoring API unreachable"** banner and keeps the last data visible, labelled as stale. |
+| Evaluator loop stalls or errors (API still up) | `/api/v1/health/summary` reports `evaluator.running = false` and the last error, read from the shared `evaluator_heartbeat` row, so *any* replica gives the same answer. The dashboard shows **"Health evaluator is not running — statuses are frozen."** |
 | Need to page someone even if the UI isn't open | `/metrics` exposes `network_pulse_evaluation_last_success_timestamp_seconds`. An external Prometheus alerts on `time() - that > 30` or `absent(up{job="network-pulse"})`, a dead man's switch that doesn't depend on this service. |
 | Restart loses state? | No. Status, hysteresis counters and open alerts live in Postgres, so a restart picks up mid-incident without re-alerting. |
 | **Restart after a long outage** | Initially, every site's `last_seen_at` was stale on restart, so the first evaluation marked the **whole fleet OFFLINE**: an alert storm caused by the monitor's own downtime. Fixed: silence is measured from `max(last_seen_at, evaluator_start)`, so sites are only blamed for silence we were actually listening for (`test_monitor_restart_does_not_mark_every_site_offline`). |
 | Database down | `/readyz` returns 503, ingestion fails, and the evaluator records the error and keeps retrying. Collectors should buffer and retry (the simulator retries every tick). |
 | Webhook endpoint down | Delivery runs on a background thread pool with a 3 s timeout. Failures are logged and counted (`network_pulse_alert_notifications_total{result="failed"}`) and never block evaluation. |
 
-**Next steps:** run two evaluators with leader election for high availability; have collectors buffer to disk during an outage and backfill timestamps; and treat "most of the fleet went stale at once" as a *pipeline* incident (one alert) rather than N site outages.
+**Next steps:** have collectors buffer to disk during an outage and backfill timestamps; and treat "most of the fleet went stale at once" as a *pipeline* incident (one alert) rather than N site outages.
 
 ### 4. How would you reduce false-positive alerts?
 
@@ -161,7 +166,8 @@ What the system already does:
 Next steps:
 - **Per-site, time-of-day baselines**: thresholds as "N× this site's p95 for this hour" rather than a global 150 ms.
 - **Alert grouping and correlation**: one alert for "West Houston: 6 sites degraded" instead of six, and suppress downstream sites when their upstream aggregation point is down.
-- **Maintenance windows and silences**: planned work shouldn't page.
+- **Maintenance windows** (built): planned work doesn't page. The evaluator holds the site in MAINTENANCE, so nothing trips; uptime excludes the window, as an SLA would; and when the window ends the site is judged from scratch, so a botched upgrade still pages immediately. Only the API writes `maintenance_until` and the evaluator never does, so its bulk UPDATE can't overwrite a window started mid-tick.
+- **Silences**: muting a known, already-paged incident is the next step after maintenance windows.
 - **Measure it**: track alert precision (alerts that needed action ÷ all alerts) and time-to-detect as SLOs, and tune the knobs against both, since they trade off directly.
 
 ---

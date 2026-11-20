@@ -17,6 +17,8 @@ The interesting part is **telling a real outage from a blip**: a rolling-window 
 - **Load-tested to 10,000 sites**: a scale mode in the simulator plus `scripts/benchmark.py`. Load testing found an ORM write bottleneck and a Postgres deadlock; after fixing both, evaluation at 10k sites went from 3.2 s to 0.9 s per tick with no lost data (see [ARCHITECTURE.md](ARCHITECTURE.md#measured-at-scale)).
 - **Chaos testing**: inject latency, packet loss, outage or *flapping* (which should **not** alert) from the UI or API.
 - **Self-monitoring**: `/healthz`, `/readyz`, an evaluator heartbeat shown in the UI, and Prometheus `/metrics`, so you can tell when the monitor itself is broken.
+- **High availability**: run several API replicas (`--scale api=2`). A Postgres advisory lock elects one evaluator; if it dies, another replica takes over within one tick (measured: 6.4 s after a hard kill, no false alerts). The database itself enforces one open alert per site.
+- **Maintenance windows**: put a site into planned maintenance from the dashboard or API. It won't alert or count against uptime, and when the window ends it's re-checked from scratch, so if the work broke it, it pages immediately.
 
 ## Quick start (Docker)
 
@@ -24,11 +26,19 @@ The interesting part is **telling a real outage from a blip**: a rolling-window 
 docker compose up --build
 ```
 
+Or with two API replicas and automatic failover:
+
+```bash
+docker compose up --build --scale api=2
+```
+
 | URL | What |
 |---|---|
 | http://localhost:8080 | Dashboard |
-| http://localhost:8000/docs | Interactive API docs (OpenAPI) |
-| http://localhost:8000/metrics | Prometheus metrics |
+| http://localhost:8080/docs | Interactive API docs (OpenAPI) |
+| http://localhost:8080/metrics | Prometheus metrics (from whichever replica answers) |
+
+In Docker the API is reached through nginx on port 8080, which is what lets it run as several replicas.
 
 To post alerts to Slack or Discord, copy `.env.example` to `.env` and set `WEBHOOK_URL`.
 
@@ -69,12 +79,14 @@ cd backend && pytest && ruff check .
 2. Under **Chaos testing**, click **Site outage**. About 30 s later the site turns OFFLINE, its marker pulses, and a critical alert appears.
 3. Click **Clear**. The site returns to HEALTHY only after 4 consecutive good checks, and the alert resolves with its duration.
 4. Click **Flapping** on another site. It spikes on every third sample but never changes status and never alerts. That's the false-positive protection at work.
+5. On a third site, click **Start maintenance**, then **Site outage**. The site stays in MAINTENANCE with no alert. Click **End maintenance now** while it's still down: it goes OFFLINE and pages within one tick.
+6. With `--scale api=2`, hover the header pill to see which replica leads, then `docker kill` that container. The other replica takes over in a few seconds and the dashboard never notices.
 
 Or use the API directly:
 
 ```bash
-curl -X PUT localhost:8000/api/v1/chaos/HOU-002 -H "Content-Type: application/json" -d '{"fault":"latency","duration_s":120}'
-curl localhost:8000/api/v1/health/unhealthy
+curl -X PUT localhost:8080/api/v1/chaos/HOU-002 -H "Content-Type: application/json" -d '{"fault":"latency","duration_s":120}'
+curl localhost:8080/api/v1/health/unhealthy
 ```
 
 ## API
@@ -83,11 +95,12 @@ curl localhost:8000/api/v1/health/unhealthy
 |---|---|---|
 | `POST` | `/api/v1/metrics` | Ingest a batch of samples `{samples: [{site_id, latency_ms, packet_loss_pct, availability_pct, ts?}]}` |
 | `GET` | `/api/v1/health/unhealthy` | Degraded + offline sites, worst first, with reasons |
-| `GET` | `/api/v1/health/summary` | Counts by status, open alerts, evaluator liveness |
+| `GET` | `/api/v1/health/summary` | Counts by status, open alerts, evaluator liveness and current leader |
 | `GET` | `/api/v1/health/config` | Active thresholds and hysteresis settings |
 | `GET` | `/api/v1/sites[?status=&region=]` | All sites with current status and window medians |
 | `PUT` | `/api/v1/sites/{id}` | Register / update a site |
 | `GET` | `/api/v1/sites/{id}/metrics?minutes=15` | Raw time series |
+| `PUT/DELETE` | `/api/v1/sites/{id}/maintenance` | Start a maintenance window `{minutes}` / end it now |
 | `GET` | `/api/v1/sites/{id}/uptime?hours=24` | Availability, healthy %, incidents and MTTR for one site |
 | `GET` | `/api/v1/health/uptime?hours=24` | The same, fleet-wide (weighted by observed time) |
 | `GET` | `/api/v1/alerts[?state=open]` | Alerts, newest first |
