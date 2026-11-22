@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api";
 import { AlertFeed } from "./components/AlertFeed";
 import { MonitorBanner, MonitorPill } from "./components/MonitorStatus";
@@ -7,12 +7,26 @@ import { SiteList } from "./components/SiteList";
 import { SiteMap } from "./components/SiteMap";
 import { SummaryTiles } from "./components/SummaryTiles";
 import { usePolling } from "./hooks/usePolling";
-import type { SiteStatus } from "./types";
+import type { HealthSummary, SiteStatus } from "./types";
 
 const POLL_MS = 3000;
 
+/**
+ * Mirror fleet health in the browser tab, so a dashboard left in a background
+ * tab still shows trouble: "(3) Network Pulse" with 3 unhealthy sites, or a
+ * warning when the monitor itself is unreachable or stalled.
+ */
+function tabTitle(summary: HealthSummary | undefined, error: Error | undefined): string {
+  if (error) return "⚠ Monitor unreachable · Network Pulse";
+  if (!summary) return "Network Pulse";
+  if (!summary.evaluator.running) return "⚠ Evaluator stalled · Network Pulse";
+  const unhealthy = summary.counts.offline + summary.counts.degraded;
+  return unhealthy ? `(${unhealthy}) Network Pulse` : "Network Pulse";
+}
+
 export default function App() {
-  const summary = usePolling(api.summary, POLL_MS);
+  // Keeps polling in a background tab (one cheap GROUP BY) so the tab title stays live.
+  const summary = usePolling(api.summary, POLL_MS, [], { background: true });
   const sites = usePolling(api.sites, POLL_MS);
   const alerts = usePolling(api.alerts, POLL_MS);
   const config = usePolling(api.config, 60_000);
@@ -20,6 +34,11 @@ export default function App() {
   const uptime = usePolling(() => api.fleetUptime(24), 15_000);
   const [filter, setFilter] = useState<SiteStatus | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const title = tabTitle(summary.data, summary.error);
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
 
   return (
     <div className="app">

@@ -11,9 +11,15 @@ export interface Polled<T> {
  * Calls `fetcher` every `intervalMs`, keeping the last good value on errors so
  * the UI degrades to "stale" instead of going blank. Uses a setTimeout chain
  * (not setInterval) so slow responses never stack up, and pauses while the
- * tab is hidden.
+ * tab is hidden unless `background` is set (for the one cheap poll that keeps
+ * the tab title current).
  */
-export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number, deps: unknown[] = []): Polled<T> {
+export function usePolling<T>(
+  fetcher: () => Promise<T>,
+  intervalMs: number,
+  deps: unknown[] = [],
+  { background = false }: { background?: boolean } = {},
+): Polled<T> {
   const [data, setData] = useState<T>();
   const [error, setError] = useState<Error>();
   const [lastSuccess, setLastSuccess] = useState<Date>();
@@ -35,7 +41,7 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number, dep
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const run = async () => {
-      if (document.visibilityState === "visible") {
+      if (background || document.visibilityState === "visible") {
         try {
           const value = await fetcherRef.current();
           if (cancelled) return;
@@ -55,7 +61,7 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number, dep
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intervalMs, tick, ...deps]);
+  }, [intervalMs, tick, background, ...deps]);
 
   return { data, error, lastSuccess, refresh };
 }
