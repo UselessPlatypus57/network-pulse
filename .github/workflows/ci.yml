@@ -41,8 +41,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
       - run: pip install -r requirements-dev.txt
-      - name: Lint
-        run: ruff check .
+      - name: Lint (backend, simulator, scripts)
+        # One rule set for all Python in the repo; --config makes the simulator and
+        # scripts use backend/pyproject.toml explicitly (they have no config of their own).
+        run: ruff check . ../simulator ../scripts --config pyproject.toml
       - name: Test
         run: pytest -q
 
