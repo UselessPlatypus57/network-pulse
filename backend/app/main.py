@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -47,6 +48,11 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "PUT", "POST", "DELETE"],
         allow_headers=["Content-Type"],
     )
+    # Site lists are repetitive JSON: gzip shrinks them by an order of magnitude.
+    # Only when the client sends Accept-Encoding: gzip, and only above 1 KB (tiny
+    # health checks aren't worth the CPU). Level 5 rather than the default 9:
+    # nearly the same size for noticeably less CPU per request.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
     @app.get("/healthz", tags=["ops"])
     def healthz() -> dict[str, str]:

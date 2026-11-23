@@ -124,6 +124,8 @@ Net result at 10,040 sites: **3,186 ms → 890 ms per tick (3.6× faster)**, a f
 
 **What the numbers say comes next:** the evaluator now uses under 20% of its 5 s budget at 10k sites. The next bottleneck is the **dashboard**: every viewer re-downloads the full 3.7 MB site list every 3 seconds. That's why the first two items below are where I'd go next.
 
+**First step taken: gzip.** The site list is repetitive JSON, so the API now compresses responses over 1 KB for clients that accept gzip (every browser does). Measured at 10,040 sites: **3,917 KB → 238 KB per poll (16× smaller)**, for about 19 ms of extra server CPU per request at compression level 5. That treats the symptom (bytes); sending only *changes* (item 1) treats the cause.
+
 What's already in place:
 - Batched ingestion: one request and one transaction per collector tick, not per sample.
 - Ingestion doesn't evaluate, so ingest throughput and evaluation cost scale independently.
@@ -131,7 +133,7 @@ What's already in place:
 - The dashboard's summary endpoint is a single `GROUP BY`.
 
 What I'd change, roughly in order (re-ordered by what the measurements showed):
-1. **Dashboard**: push status *changes* over SSE or WebSocket, or at least use `ETag`s so an unchanged poll costs a `304`, instead of re-sending the whole 3.7 MB site list every 3 s. Add server-side filtering and pagination, and marker clustering on the map.
+1. **Dashboard**: push status *changes* over SSE or WebSocket, or at least use `ETag`s so an unchanged poll costs a `304`, instead of re-sending the whole site list (238 KB compressed, 3.7 MB raw) every 3 s. Add server-side filtering and pagination, and marker clustering on the map.
 2. **Write less per tick**: the evaluator rewrites every site's window medians on every tick. Writing only rows whose *status* changed, and serving live medians from the window query or a cache, would cut the bulk write to a handful of rows.
 3. **Shard the evaluator** by `hash(site_id) % N`, with each worker owning a slice of sites. Today the API already runs as several replicas with **exactly one elected evaluator** (see Q3); sharding would let evaluation itself scale past one leader.
 4. **Time-series storage**: TimescaleDB hypertables (or native partitioning by day), so retention is `DROP PARTITION` instead of `DELETE`. A continuous aggregate can pre-compute per-window stats.

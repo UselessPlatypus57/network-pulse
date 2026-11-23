@@ -91,3 +91,20 @@ def test_last_seen_only_moves_forward(client):
     client.post("/api/v1/metrics", json={"samples": [{**sample(), "ts": older}]})
     seen = client.get("/api/v1/sites/HOU-001").json()["last_seen_at"]
     assert seen.startswith("2026-01-01T12:00:10")
+
+
+def test_large_responses_are_gzipped_when_the_client_accepts_it(client):
+    """The site list is the dashboard's biggest poll; it must be compressed for
+    clients that ask, sent plain to clients that don't, and tiny responses skip it."""
+    for i in range(40):
+        client.put(f"/api/v1/sites/HOU-{i:03d}", json=SITE)
+
+    gz = client.get("/api/v1/sites", headers={"Accept-Encoding": "gzip"})
+    plain = client.get("/api/v1/sites", headers={"Accept-Encoding": "identity"})
+    assert gz.headers.get("content-encoding") == "gzip"
+    assert "content-encoding" not in plain.headers
+    assert gz.json() == plain.json()  # same data either way
+    assert gz.num_bytes_downloaded < plain.num_bytes_downloaded / 4
+
+    small = client.get("/healthz", headers={"Accept-Encoding": "gzip"})
+    assert "content-encoding" not in small.headers  # under the 1 KB minimum
